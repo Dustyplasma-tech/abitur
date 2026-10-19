@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4e8c">
+<title>Abitur Training</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#1c2230;--mute:#5d677a;--pri:#1f4e8c;--pri-ink:#fff;--ok:#1b7f3b;--bad:#b3261e;--warn:#b26a00;--line:#dde2ec;--r:14px}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#1a2030;--ink:#e8ecf5;--mute:#9aa6bd;--pri:#6aa3ff;--pri-ink:#07101f;--ok:#58c27d;--bad:#ff8a80;--warn:#ffb74d;--line:#2b3347}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+.top{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--line)}
+.brand{font-weight:700;color:var(--pri);text-decoration:none;margin-right:auto}
+select,input,textarea,button{font:inherit;color:inherit}
+select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:0 8px}
+main{max-width:860px;margin:0 auto;padding:12px 14px 24px;outline:none}
+h1{font-size:1.45rem;margin:.4em 0}h2{font-size:1.15rem;margin:1.2em 0 .4em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:10px 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:var(--pri-ink);font-weight:600;cursor:pointer;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--pri)}.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}.btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.big{width:100%;min-height:56px;font-size:1.1rem}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+.tabs a{flex:1;text-align:center;padding:14px 4px;text-decoration:none;color:var(--mute);font-size:.9rem;min-height:56px}
+.tabs a.on{color:var(--pri);font-weight:700;box-shadow:inset 0 3px 0 var(--pri)}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--bad)}
+.bar.good>i{background:var(--ok)}
+.tag{display:inline-block;font-size:.78rem;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-right:4px}
+.muted{color:var(--mute)}.small{font-size:.85rem}
+.topic{display:block;text-decoration:none;color:inherit}.topic .t{font-weight:600}
+.prompt{white-space:pre-wrap}
+input[type=text],textarea{width:100%;min-height:48px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--card)}
+.sol{border-left:4px solid var(--pri);padding:6px 12px;margin:10px 0;background:var(--bg);white-space:pre-wrap}
+.good{color:var(--ok)}.badtxt{color:var(--bad)}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:.95rem}th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{background:var(--bg)}
+.tablewrap{overflow-x:auto}
+pre{white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:10px;overflow-x:auto}
+.cols{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:760px){.cols.two{grid-template-columns:1fr 1fr}main{padding:16px 20px}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chip{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:99px;background:var(--card);cursor:pointer}.chip.on{background:var(--pri);color:var(--pri-ink);border-color:var(--pri)}
+.timer{font-variant-numeric:tabular-nums;font-weight:700}
+[hidden]{display:none!important}
+
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">Abitur&nbsp;Training</a>
+  <select id="subject" aria-label="Fach / Subject"></select>
+  <select id="lang" aria-label="Sprache / Language">
+    <option value="de">DE</option><option value="en">EN</option><option value="both">DE | EN</option>
+  </select>
+</header>
+<main id="app" tabindex="-1"></main>
+<nav class="tabs" aria-label="Navigation">
+  <a href="#/" data-tab="home">Start</a>
+  <a href="#/practice" data-tab="practice">Üben</a>
+  <a href="#/topics" data-tab="topics">Themen</a>
+  <a href="#/vocab" data-tab="vocab">Wörter</a>
+  <a href="#/progress" data-tab="progress">Stand</a>
+</nav>
+<script>
+'use strict';
+/* Abitur Training – static, no build step. Content: content/<fach>/*.json (see content/index.json). */
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KEY='abitur.v1', DAY=864e5, BOX_DAYS=[0,1,3,7,14], SESSION_MIN=15;
+const T_UI={de:{start:'Start'},en:{start:'Start'}};
+let S, D={}, index, cur;       // state, loaded subject data, content index, current subject id
+
+/* ---------- storage ---------- */
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x&&x.v===1)return x}catch(e){}return {v:1,lang:'de',subject:null,p:{},log:{}}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function P(){return S.p[cur]??={t:{},q:{}}}
+function today(){return new Date().toISOString().slice(0,10)}
+
+/* ---------- data ---------- */
+/* ---------- password gate: data.enc = salt(16) + iv(12) + AES-256-GCM(JSON). key = PBKDF2-SHA256(password, salt) ---------- */
+const ITER=600000;
+let DB=null;
+const b64=u=>{let s='';u.forEach(c=>s+=String.fromCharCode(c));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function deriveKey(pw,salt){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},true,['decrypt'])}
+async function openBundle(buf,key){const u=new Uint8Array(buf);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(16,28)},key,u.slice(28));return JSON.parse(new TextDecoder().decode(pt))}
+async function unlock(){
+  const r=await fetch('data.enc');if(!r.ok)throw new Error('data.enc '+r.status);const buf=await r.arrayBuffer(),salt=new Uint8Array(buf,0,16);
+  try{const saved=localStorage.getItem('abitur.key');if(saved){DB=await openBundle(buf,await crypto.subtle.importKey('raw',unb64(saved),'AES-GCM',true,['decrypt']));return}}catch(e){}
+  await new Promise(res=>{
+    $('.top').hidden=true;document.querySelector('.tabs').hidden=true;
+    view(`<h1>Abitur Training</h1><form class="card" id="gate"><p>Bitte Passwort eingeben.</p><p><input type="password" id="pw" autocomplete="current-password" aria-label="Passwort" autofocus></p><button class="btn big" type="submit">Öffnen</button><p id="gerr" class="badtxt" role="alert"></p></form>`);
+    $('#gate').onsubmit=async e=>{e.preventDefault();const b=$('#gate button');b.disabled=true;$('#gerr').textContent='';
+      try{const k=await deriveKey($('#pw').value,salt);DB=await openBundle(buf,k);
+        try{localStorage.setItem('abitur.key',b64(new Uint8Array(await crypto.subtle.exportKey('raw',k))))}catch(_){}
+        $('.top').hidden=false;document.querySelector('.tabs').hidden=false;res()}
+      catch(_){$('#gerr').textContent='Falsches Passwort.';b.disabled=false}}})}
+function lock(){try{localStorage.removeItem('abitur.key')}catch(e){}location.reload()}
+
+async function loadSubject(id){
+  if(D[id])return D[id];
+  const x=DB.data[id];
+  const d={topics:Array.isArray(x.topics)?x.topics:x.topics.topics,questions:x.questions,areas:x.areas,vocab:x.vocab,weak:x.weakness};
+  d.tById=Object.fromEntries(d.topics.map(t=>[t.id,t]));
+  d.qByTopic={};for(const q of d.questions)for(const t of q.topics||[])(d.qByTopic[t]??=[]).push(q);
+  d.klassen=[...new Set(d.topics.map(t=>t.klasse))].sort((a,b)=>a-b);
+  D[id]=d;return d;
+}
+
+/* ---------- weakness ---------- */
+function prior(t){const m=Math.max(1,...D[cur].topics.map(x=>x.points_lost||0));return t.points_lost==null?.5:Math.min(1,.15+.85*t.points_lost/m)}
+function weakness(t){const s=P().t[t.id]||{n:0,wrong:0};return (3*prior(t)+s.wrong)/(3+s.n)}   // prior counts like 3 answers
+function mastery(t){return 1-weakness(t)}
+
+/* ---------- block rendering ---------- */
+function blocks(bl){return (bl||[]).map(b=>{
+  if(b.type==='p')return `<p>${esc(b.text)}</p>`;
+  if(b.type==='ol')return `<ol>${b.items.map(i=>`<li>${esc(i)}</li>`).join('')}</ol>`;
+  if(b.type==='table')return `<div class="tablewrap"><table><thead><tr>${b.header.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${b.rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<pre>${esc(b.text)}</pre>`}).join('')}
+
+/* ---------- views ---------- */
+const view=h=>{$('#app').innerHTML=h;$('#app').focus({preventScroll:true});window.scrollTo(0,0)};
+function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="Schwäche ${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
+function weakest(n,klasse){return D[cur].topics.filter(t=>!klasse||t.klasse===klasse).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]).slice(0,n)}
+
+function home(){
+  const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
+  view(`<h1>Hallo!</h1>
+  <a class="btn big" href="#/practice?timed=1">Heute ${SESSION_MIN} Minuten üben</a>
+  <p class="muted small">Heute: ${tl.n} Aufgaben, ${tl.ok} richtig · insgesamt ${answered} beantwortet</p>
+  <h2>Deine größten Schwächen</h2>
+  ${weakest(5).map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${esc(t.title_en)} · Klasse ${t.klasse}</div>${bar(w)}</a>`).join('')}
+  <div class="row"><a class="btn ghost" href="#/topics">Alle Themen</a><a class="btn ghost" href="#/progress">Stand &amp; Sicherung</a></div>`)}
+
+function topics(q){
+  const d=D[cur],k=+q.get('k')||0;
+  const list=d.topics.filter(t=>!k||t.klasse===k).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]);
+  view(`<h1>Themen</h1><div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/topics${x?'?k='+x:''}">${x?'Klasse '+x:'Alle'}</a>`).join('')}</div>
+  ${list.map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${esc(t.title_en)} · Klasse ${t.klasse} · ${(d.qByTopic[t.id]||[]).length} Aufgaben</div>${bar(w)}</a>`).join('')}`)}
+
+function topic(id){
+  const d=D[cur],t=d.tById[id];if(!t)return view('<p>Thema nicht gefunden.</p>');
+  const L=t.lesson||{},lang=S.lang,vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
+  const de=`<div><h2>Wissen (DE)</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<div><h2>Knowledge (EN)</h2>${blocks(L.knowledge_en)}</div>`:'';
+  view(`<h1>${esc(t.title_de)}</h1><div class="muted">${esc(t.title_en)}</div>
+  <p><span class="tag">Klasse ${t.klasse}</span><span class="tag">${t.error_type==='careless'?'Flüchtigkeit':'Verständnis'}</span><span class="tag">${t.points_lost??0} Punkte verloren</span></p>
+  ${bar(weakness(t))}
+  <p><a class="btn" href="#/practice?topic=${t.id}">Dieses Thema üben</a></p>
+  <details class="card" open><summary><b>Beispiel (Aufgabe aus dem Test)</b></summary>${blocks(L.worked_example_de)}</details>
+  <div class="cols ${lang==='both'?'two':''}">${lang==='en'?en:lang==='de'?de:de+en}</div>
+  ${vocab.length?`<h2>Wörter</h2><div class="card">${vocab.map(v=>`<div>${esc(v.de)} · <b>${esc(v.en)}</b> · ${esc(v.zh)}</div>`).join('')}</div>`:''}
+  ${t.curriculum&&t.curriculum.doc?`<p class="muted small">Lehrplan: ${esc(t.curriculum.doc)}${t.curriculum.verified?'':' (Seitenangabe noch nicht geprüft)'}</p>`:''}`)}
+
+/* ---------- practice ---------- */
+let run=null;
+function pickQuestion(topicId,klasse){
+  const d=D[cur],now=Date.now(),pool=d.topics.filter(t=>(!topicId||t.id===topicId)&&(!klasse||t.klasse===klasse)&&(d.qByTopic[t.id]||[]).length);
+  if(!pool.length)return null;
+  const ws=pool.map(t=>weakness(t)**2+.03);let r=Math.random()*ws.reduce((a,b)=>a+b,0),t=pool[0];
+  for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0){t=pool[i];break}}
+  const qs=d.qByTopic[t.id].filter(q=>!run.seen.has(q.id)).sort((a,b)=>{const A=P().q[a.id],B=P().q[b.id];return (A?A.due:0)-(B?B.due:0)});
+  const q=qs[0]||d.qByTopic[t.id][Math.floor(Math.random()*d.qByTopic[t.id].length)];
+  return {q,t}
+}
+function practice(qs){
+  run={topic:qs.get('topic')||'',k:+qs.get('k')||0,timed:qs.get('timed')==='1',start:Date.now(),seen:new Set(),n:0,ok:0};
+  nextQ();
+}
+function nextQ(){
+  if(run.timed&&Date.now()-run.start>SESSION_MIN*60e3)return summary();
+  const x=pickQuestion(run.topic,run.k);if(!x){view('<p>Keine Aufgaben für diese Auswahl.</p>');return}
+  run.cur=x;run.seen.add(x.q.id);run.res=x.q.parts&&x.q.parts.length?x.q.parts.map(()=>null):[null];renderQ()
+}
+function parseNum(s){
+  s=String(s).trim().replace(/[\s  ]/g,'').replace(/−/g,'-').replace(/,/g,'.');
+  let m=s.match(/^(-?[\d.]+)\/([\d.]+)$/);if(m)return +m[1]/+m[2];
+  m=s.match(/^-?[\d.]+(e-?\d+)?/i);return m?parseFloat(m[0]):NaN}
+function numOK(c,inp){const v=parseNum(inp);if(isNaN(v))return false;return Math.abs(v-c.value)<=Math.max(.005,Math.abs(c.value)*.005)}
+function itemHTML(label,prompt,chk,i,sol){
+  const num=chk&&chk.mode==='number';
+  return `<div class="card" data-i="${i}">${label?`<b>${esc(label)})</b> `:''}<span class="prompt">${esc(prompt)}</span>
+  ${num?`<p><input type="text" inputmode="decimal" autocomplete="off" aria-label="Antwort" placeholder="Antwort${chk.unit?' in '+esc(chk.unit):''}"></p>
+  <button class="btn" data-act="check">Prüfen</button> `:''}
+  <button class="btn ghost" data-act="show">Lösung zeigen</button>
+  <div class="out"></div></div>`}
+function renderQ(){
+  const {q,t}=run.cur,elapsed=Math.floor((Date.now()-run.start)/1000);
+  const items=q.parts&&q.parts.length?q.parts.map((p,i)=>itemHTML(p.label,p.prompt_de,p.check,i)):[itemHTML('',q.prompt_de,q.check,0)];
+  const lead=q.parts&&q.parts.length?`<p class="prompt muted small">${esc(leadText(q))}</p>`:'';
+  view(`<div class="row" style="align-items:center"><span class="tag">${esc(t.title_de)}</span><span class="muted small">Aufgabe ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
+  <h1>${esc(q.title_de)}</h1>${lead}${items.join('')}
+  <div id="nextbox"></div>
+  <p><a class="muted small" href="#/topic/${t.id}">Erklärung zum Thema ansehen</a> · <a class="muted small" href="#/summary" id="stop">Beenden</a></p>`);
+  $('#stop').onclick=e=>{e.preventDefault();summary()};
+  if(run.timed)tick();
+  $('#app').onclick=onQClick;
+}
+function leadText(q){const i=q.prompt_de.search(/(^|\n)\s*a\)/);return i>0?q.prompt_de.slice(0,i).trim():''}
+let tm;function tick(){clearInterval(tm);const f=()=>{const e=$('#tm');if(!e){clearInterval(tm);return}const r=Math.max(0,SESSION_MIN*60-Math.floor((Date.now()-run.start)/1000));e.textContent=`${Math.floor(r/60)}:${String(r%60).padStart(2,'0')}`};f();tm=setInterval(f,1000)}
+function onQClick(ev){
+  const b=ev.target.closest('button[data-act],button[data-grade],button[data-next]');if(!b)return;
+  const {q}=run.cur,card=b.closest('.card'),i=card?+card.dataset.i:0,item=q.parts&&q.parts.length?q.parts[i]:q,out=card&&$('.out',card);
+  if(b.dataset.next){return nextQ()}
+  if(b.dataset.act==='check'){
+    const ok=numOK(item.check,$('input',card).value);
+    out.innerHTML=`<p class="${ok?'good':'badtxt'}"><b>${ok?'Richtig ✓':'Nicht ganz ✗'}</b></p><div class="sol">${esc(item.solution_de)}</div>`;
+    card.querySelectorAll('button').forEach(x=>x.hidden=true);setRes(i,ok);
+  }else if(b.dataset.act==='show'){
+    card.querySelectorAll('button[data-act]').forEach(x=>x.hidden=true);
+    out.innerHTML=`<div class="sol">${esc(item.solution_de||'')}</div><div class="row"><button class="btn ok" data-grade="1">Richtig</button><button class="btn bad" data-grade="0">Falsch / unsicher</button></div>`;
+  }else if(b.dataset.grade!==undefined){
+    $('.row',out).remove();setRes(i,b.dataset.grade==='1');
+    out.insertAdjacentHTML('afterbegin',`<p class="${b.dataset.grade==='1'?'good':'badtxt'}">${b.dataset.grade==='1'?'Gemerkt: richtig ✓':'Gemerkt: üben wir nochmal'}</p>`);
+  }
+}
+function setRes(i,ok){run.res[i]=!!ok;if(run.res.every(x=>x!==null))finishQ()}
+function finishQ(){
+  const {q,t}=run.cur,ok=run.res.every(Boolean),p=P(),now=Date.now();
+  const s=p.t[t.id]??={n:0,wrong:0};s.n++;if(!ok)s.wrong++;s.last=now;
+  const r=p.q[q.id]??={box:0,n:0,ok:0};r.n++;if(ok){r.ok++;r.box=Math.min(4,r.box+1)}else r.box=0;r.due=now+BOX_DAYS[r.box]*DAY;
+  const l=S.log[today()]??={n:0,ok:0};l.n++;if(ok)l.ok++;
+  run.n++;if(ok)run.ok++;save();
+  $('#nextbox').innerHTML=`<button class="btn big" data-next="1">Weiter</button>`;
+  $('#nextbox button').scrollIntoView({block:'nearest'});
+}
+function summary(){
+  clearInterval(tm);const r=run||{n:0,ok:0};
+  view(`<h1>Fertig</h1><div class="card"><p><b>${r.ok}</b> von <b>${r.n}</b> richtig.</p><p class="muted">Falsche Aufgaben kommen früher wieder.</p></div>
+  <div class="row"><a class="btn" href="#/practice?timed=1">Nochmal</a><a class="btn ghost" href="#/">Start</a></div>`);run=null}
+
+/* ---------- vocab ---------- */
+function vocab(q){
+  const d=D[cur],k=+q.get('k')||0,s=(q.get('s')||'').toLowerCase();
+  const list=d.vocab.filter(v=>(!k||v.klasse===k)&&(!s||[v.de,v.en,v.zh].join(' ').toLowerCase().includes(s)));
+  view(`<h1>Wörter DE · EN · 中文</h1><input type="text" id="vs" placeholder="Suchen / Search / 搜索" value="${esc(s)}">
+  <div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/vocab?k=${x}&s=${encodeURIComponent(s)}">${x?'Klasse '+x:'Alle'}</a>`).join('')}</div>
+  <p class="muted small">${list.length} Wörter</p>
+  <div class="card tablewrap"><table><tbody>${list.map(v=>`<tr><td>${esc(v.de)}</td><td><b>${esc(v.en)}</b></td><td>${esc(v.zh)}</td></tr>`).join('')}</tbody></table></div>`);
+  $('#vs').onchange=e=>{location.hash=`#/vocab?k=${k}&s=${encodeURIComponent(e.target.value)}`};
+}
+
+/* ---------- progress / backup ---------- */
+function progress(){
+  const d=D[cur],days=Object.keys(S.log).sort().slice(-14);
+  view(`<h1>Stand</h1>
+  <h2>Themen nach Schwäche</h2>${weakest(99).map(([t,w])=>{const s=P().t[t.id]||{n:0};return `<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${s.n} beantwortet · Schwäche ${Math.round(w*100)} %</div>${bar(w)}</a>`}).join('')}
+  <h2>Letzte Tage</h2><div class="card">${days.length?days.map(x=>`<div>${x}: ${S.log[x].ok}/${S.log[x].n} richtig</div>`).join(''):'<span class="muted">Noch nichts geübt.</span>'}</div>
+  <h2>Sicherung</h2><div class="card"><p class="small muted">Der Fortschritt liegt nur in diesem Browser. Sichere ihn regelmäßig.</p>
+  <div class="row"><button class="btn" id="exp">Exportieren</button><label class="btn ghost">Importieren<input id="imp" type="file" accept="application/json" hidden></label><button class="btn ghost" id="rst">Zurücksetzen</button></div></div>
+  <p><button class="btn ghost" id="lck">Sperren (Passwort neu eingeben)</button></p>`);
+  $('#lck').onclick=lock;
+  $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download=`abitur-fortschritt-${today()}.json`;a.click()};
+  $('#imp').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(x.v!==1)throw 0;S=x;save();alert('Importiert.');route()}catch(_){alert('Datei passt nicht.')}};
+  $('#rst').onclick=()=>{if(confirm('Wirklich alles löschen?')){S={v:1,lang:S.lang,subject:S.subject,p:{},log:{}};save();route()}};
+}
+
+/* ---------- router ---------- */
+async function route(){
+  const h=location.hash.slice(1)||'/',[path,qs]=h.split('?'),q=new URLSearchParams(qs||''),parts=path.split('/').filter(Boolean);
+  clearInterval(tm);$('#app').onclick=null;
+  try{await loadSubject(cur)}catch(e){return view(`<p class="badtxt">Inhalt konnte nicht geladen werden: ${esc(e.message)}</p>`)}
+  document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===({'':'home',practice:'practice',topics:'topics',topic:'topics',vocab:'vocab',progress:'progress'}[parts[0]||'']??'home')));
+  const R={'':home,topics:()=>topics(q),topic:()=>topic(parts[1]),practice:()=>practice(q),vocab:()=>vocab(q),progress,summary};
+  (R[parts[0]||'']||home)();
+}
+async function boot(){
+  S=load();await unlock();index={subjects:DB.subjects};
+  const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
+  cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
+  sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
+  $('#lang').value=S.lang||'de';$('#lang').onchange=e=>{S.lang=e.target.value;save();route()};
+  window.addEventListener('hashchange',route);route();
+  if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+boot().catch(e=>{$('#app').innerHTML='<p>Start fehlgeschlagen: '+esc(e.message)+'</p>'});
+
+</script>
+</body>
+</html>
