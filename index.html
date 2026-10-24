@@ -69,11 +69,37 @@ fieldset.fld legend{padding:0 4px}
 [data-lang=both] .btn .en::before{content:none}[data-lang=both] .btn .en{display:block;font-size:.8em;font-weight:400}
 .expl .en2{color:var(--mute);margin-top:4px;font-size:.92rem}
 
+/* game */
+.xpchip{font-size:.82rem;font-weight:700;padding:6px 10px;border-radius:99px;background:linear-gradient(90deg,#ffb300,#ff7043);color:#2b1700;text-decoration:none;white-space:nowrap}
+.tabs a[data-tab=rewards]{font-size:1.2rem}
+.xpcard{display:block;text-decoration:none;color:inherit;background:linear-gradient(135deg,color-mix(in srgb,var(--pri) 14%,var(--card)),var(--card))}
+.lvl{display:flex;gap:10px;align-items:center;margin-bottom:6px}.lvl .muted{margin-left:auto}
+.lvbadge{background:var(--pri);color:var(--pri-ink);font-weight:800;border-radius:10px;padding:2px 10px}
+.bar.xp{height:16px;border-radius:10px}.bar.xp>i{background:linear-gradient(90deg,#ffb300,#ff7043);transition:width .6s}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}.stats div{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px;text-align:center}.stats b{display:block;font-size:1.3rem}.stats span{color:var(--mute);font-size:.8rem}
+@media(min-width:600px){.stats{grid-template-columns:repeat(4,1fr)}}
+.badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.bd{display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center;padding:10px;border:1px dashed var(--line);border-radius:var(--r);opacity:.55;background:var(--card)}.bd.on{opacity:1;border:1px solid var(--warn)}.bi{font-size:2rem}
+.calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.cw{text-align:center;color:var(--mute);font-size:.78rem}
+.cd{aspect-ratio:1;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.85rem;line-height:1.1}.cd i{font-style:normal}.cd b{font-size:.75rem}.cd.empty{border:0}
+.cd.done{background:var(--ok);color:#fff;border-color:var(--ok)}.cd.part{background:color-mix(in srgb,var(--warn) 25%,var(--card))}.cd.today{outline:3px solid var(--pri);outline-offset:1px}
+.gamebar{position:sticky;top:57px;z-index:4;display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-bottom:8px;font-size:.9rem}
+.reward{margin:12px 0;padding:12px;border-radius:var(--r);background:color-mix(in srgb,var(--warn) 18%,var(--card));border:1px solid var(--warn);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.rp{font-weight:800;font-size:1.2rem}.lvup,.newbd{width:100%;font-weight:700}
+.pop{animation:pop .5s ease-out}
+@keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.center{text-align:center}.stars{font-size:2.8rem;letter-spacing:8px;color:var(--mute)}.stars .on{color:#ffb300;display:inline-block;animation:pop .6s both}
+.big2{font-size:1.3rem;margin:.2em 0}.xpgain{font-size:1.6rem;font-weight:800;color:var(--warn);margin:.2em 0}
+.cf{position:fixed;top:-30px;font-size:1.6rem;animation:fall 2.8s ease-in forwards;pointer-events:none;z-index:9}
+@keyframes fall{to{transform:translateY(110vh) rotate(360deg);opacity:.2}}
+@media(prefers-reduced-motion:reduce){.pop,.stars .on,.cf{animation:none}.cf{display:none}}
+
 </style>
 </head>
 <body>
 <header class="top">
   <a class="brand" href="#/">Abitur&nbsp;Training</a>
+  <a id="xp" class="xpchip" href="#/rewards" aria-label="Belohnungen"></a>
   <select id="subject" aria-label="Fach / Subject"></select>
 </header>
 <main id="app" tabindex="-1"></main>
@@ -82,6 +108,7 @@ fieldset.fld legend{padding:0 4px}
   <a href="#/practice" data-tab="practice">Üben</a>
   <a href="#/topics" data-tab="topics">Themen</a>
   <a href="#/vocab" data-tab="vocab">Wörter</a>
+  <a href="#/rewards" data-tab="rewards">🏆</a>
   <a href="#/progress" data-tab="progress">Stand</a>
 </nav>
 <script>
@@ -341,7 +368,7 @@ let S, D={}, index, cur;       // state, loaded subject data, content index, cur
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x&&x.v===1)return x}catch(e){}return {v:1,lang:'de',subject:null,p:{},log:{}}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 function P(){return S.p[cur]??={t:{},q:{}}}
-function today(){return new Date().toISOString().slice(0,10)}
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
 /* ---------- data ---------- */
 /* ---------- password gate: data.enc = salt(16) + iv(12) + AES-256-GCM(JSON). key = PBKDF2-SHA256(password, salt) ---------- */
@@ -370,7 +397,7 @@ async function loadSubject(id){
   if(D[id])return D[id];
   const x=DB.data[id];
   const d={topics:Array.isArray(x.topics)?x.topics:x.topics.topics,questions:x.questions,areas:x.areas,vocab:x.vocab,weak:x.weakness};
-  d.tById=Object.fromEntries(d.topics.map(t=>[t.id,t]));
+  d.tById=Object.fromEntries(d.topics.map(t=>[t.id,t]));d.qById=Object.fromEntries(d.questions.map(q=>[q.id,q]));
   d.qByTopic={};for(const q of d.questions)for(const t of q.topics||[])(d.qByTopic[t]??=[]).push(q);
   d.klassen=[...new Set(d.topics.map(t=>t.klasse))].sort((a,b)=>a-b);
   D[id]=d;return d;
@@ -393,12 +420,16 @@ const view=h=>{$('#app').innerHTML=h;$('#app').focus({preventScroll:true});windo
 function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
 function weakest(n,klasse){return D[cur].topics.filter(t=>!klasse||t.klasse===klasse).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]).slice(0,n)}
 const tTitle=t=>esc(t.title_de);
-const kl=k=>'Klasse '+k;
+const kl=k=>'Jg. '+k;
+const SETN={fehlerheft:'Fehlerheft',testA:'Test A',testB:'Test B',testC:'Test C',foerder:'Förderblatt',diagnose:'Diagnose'};
+const setName=x=>SETN[x]||x||'';
 
 function home(){
   const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
   view(`<h1>${X('Hallo!','Hello!')}</h1>
-  <a class="btn big" href="#/practice?timed=1">${X(`Heute ${SESSION_MIN} Minuten üben`,`Practise ${SESSION_MIN} minutes today`)}</a>
+  ${xpCard()}
+  ${S.run&&S.run.subject===cur?`<a class="btn big" href="#/practice">▶ Test fortsetzen (Aufgabe ${S.run.n+1})</a>`:''}
+  <a class="btn big ${S.run&&S.run.subject===cur?'ghost':''}" href="#/practice?timed=1">${X(`Heute ${SESSION_MIN} Minuten üben`,'')}</a>
   <p class="muted small">${X(`Heute: ${tl.n} Aufgaben, ${tl.ok} richtig · insgesamt ${answered} beantwortet`,`Today: ${tl.n} tasks, ${tl.ok} correct · ${answered} answered in total`)}</p>
   <h2>${X('Deine größten Schwächen','Your biggest weaknesses')}</h2>
   ${weakest(5).map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${tTitle(t)}</div><div class="muted small">${kl(t.klasse)}</div>${bar(w)}</a>`).join('')}
@@ -411,7 +442,7 @@ function topics(q){
   ${list.map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${tTitle(t)}</div><div class="muted small">${kl(t.klasse)} · ${X(`${(d.qByTopic[t.id]||[]).length} Aufgaben`,`${(d.qByTopic[t.id]||[]).length} tasks`)}</div>${bar(w)}</a>`).join('')}`)}
 
 function vocabCard(v){
-  return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span>
+  return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span><span class="tag">${kl(v.klasse)}</span>
   <button class="btn ghost sm" data-act="expl" aria-expanded="false">${X('Erklärung','Explanation')}</button></div>
   ${v.lost_points?`<span class="tag warn">${X(`${v.lost_points} Punkte im Test verloren`,`${v.lost_points} points lost in the test`)}</span>`:''}
   <div class="expl" hidden><div>${esc(v.expl_de||'')}</div><div class="en2">${esc(v.expl_en||'')}</div></div></div>`}
@@ -419,7 +450,7 @@ function vocabCard(v){
 function topic(id){
   const d=D[cur],t=d.tById[id];if(!t)return view('<p>Thema nicht gefunden.</p>');
   const L=t.lesson||{},vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
-  const de=`<div><h2>Wissen</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version</b></summary>${blocks(L.knowledge_en)}</details>`:'';
+  const de=`<div><h2>Wissen · ${kl(t.klasse)}</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version · Grade ${t.klasse}</b></summary>${blocks(L.knowledge_en)}</details>`:'';
   view(`<h1>${tTitle(t)}</h1>
   <p><span class="tag">${kl(t.klasse)}</span><span class="tag">${t.error_type==='careless'?X('Flüchtigkeit','careless mistakes'):X('Verständnis','understanding')}</span><span class="tag">${X(`${t.points_lost??0} Punkte verloren`,`${t.points_lost??0} points lost`)}</span></p>
   ${bar(weakness(t))}
@@ -429,91 +460,218 @@ function topic(id){
   ${vocab.length?`<h2>${X('Wörter','Words')}</h2><div class="card">${vocab.map(vocabCard).join('')}</div>`:''}
   ${t.curriculum&&t.curriculum.doc?`<p class="muted small">Lehrplan: ${esc(t.curriculum.doc)}${t.curriculum.verified?'':' (Seitenangabe noch nicht geprüft)'}</p>`:''}`)}
 
-/* ---------- practice: the learner types / selects, the app judges ---------- */
-let run=null;
+/* ---------- game: XP, levels, badges, streak, calendar ---------- */
+const TITLES=['Anfänger','Rechenlehrling','Zahlenjäger','Formelprofi','Algebra-Ass','Geometrie-Held','Mathe-Meister','Abitur-Legende'];
+const G=()=>S.g??={xp:0,correct:0,best:0,tests:0,badges:{}};
+const xpFor=L=>50*L*(L-1);
+const levelOf=xp=>Math.floor((1+Math.sqrt(1+xp/12.5))/2);
+function lv(xp){const L=levelOf(xp);return {L,cur:xp-xpFor(L),need:xpFor(L+1)-xpFor(L),title:TITLES[Math.min(L-1,TITLES.length-1)]}}
+const testsOn=d=>(S.log[d]&&S.log[d].tests)||0;
+const testsToday=()=>testsOn(today());
+function dstr(dt){return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')}
+function streak(){const dt=new Date();if(!testsOn(dstr(dt)))dt.setDate(dt.getDate()-1);let n=0;while(testsOn(dstr(dt))>0){n++;dt.setDate(dt.getDate()-1)}return n}
+const BADGES=[
+ {id:'first',i:'🎯',n:'Erster Treffer',d:'Die erste Aufgabe richtig',t:g=>g.correct>=1},
+ {id:'c5',i:'🔥',n:'Serie 5',d:'5 Aufgaben in Folge richtig',t:g=>g.best>=5},
+ {id:'c10',i:'🚀',n:'Serie 10',d:'10 Aufgaben in Folge richtig',t:g=>g.best>=10},
+ {id:'q50',i:'⭐',n:'50 richtig',d:'50 Aufgaben richtig gelöst',t:g=>g.correct>=50},
+ {id:'q200',i:'🏅',n:'200 richtig',d:'200 Aufgaben richtig gelöst',t:g=>g.correct>=200},
+ {id:'t1',i:'📝',n:'Erster Test',d:'Den ersten Test abgeschlossen',t:g=>g.tests>=1},
+ {id:'d3',i:'🎉',n:'Dreifach-Tag',d:'3 Tests an einem Tag',t:()=>testsToday()>=3},
+ {id:'s3',i:'📅',n:'3 Tage in Folge',d:'3 Tage hintereinander geübt',t:()=>streak()>=3},
+ {id:'s7',i:'🏆',n:'Wochen-Held',d:'7 Tage hintereinander geübt',t:()=>streak()>=7},
+ {id:'l5',i:'👑',n:'Level 5',d:'Level 5 erreicht',t:g=>levelOf(g.xp)>=5}];
+function awardBadges(){const g=G(),out=[];for(const b of BADGES)if(!g.badges[b.id]&&b.t(g)){g.badges[b.id]=today();out.push(b)}return out}
+const badgeById=id=>BADGES.find(b=>b.id===id);
+function updateChip(){const e=$('#xp');if(!e)return;const L=lv(G().xp);e.textContent=`Lv ${L.L} · ${G().xp} XP`}
+const go=h=>{if(location.hash===h)route();else location.hash=h};
+function xpCard(){const g=G(),L=lv(g.xp),pct=Math.round(100*L.cur/L.need);
+  return `<a class="card xpcard" href="#/rewards"><div class="lvl"><span class="lvbadge">Lv ${L.L}</span><b>${esc(L.title)}</b><span class="muted small">${g.xp} XP</span></div><div class="bar xp"><i style="width:${pct}%"></i></div><div class="small">Noch ${L.need-L.cur} XP bis Level ${L.L+1} · 🔥 ${streak()} ${streak()===1?'Tag':'Tage'} in Folge · Tests heute: ${testsToday()}</div></a>`}
+
+let calM=null;
+const MON=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function calHTML(){
+  const now=new Date();if(!calM)calM={y:now.getFullYear(),m:now.getMonth()};
+  const off=(new Date(calM.y,calM.m,1).getDay()+6)%7,dim=new Date(calM.y,calM.m+1,0).getDate(),td=today();let cells='',full=0,total=0;
+  for(let i=0;i<off;i++)cells+='<span class="cd empty"></span>';
+  for(let d=1;d<=dim;d++){
+    const ds=`${calM.y}-${String(calM.m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,l=S.log[ds]||{},t=l.tests||0;
+    if(t){full++;total+=t}
+    cells+=`<span class="cd ${t?'done':l.n?'part':''} ${ds===td?'today':''}" title="${t?t+' Test(s)':l.n?l.n+' Aufgaben':''}"><i>${d}</i>${t?`<b>✓${t>1?'×'+t:''}</b>`:l.n?'<b>·</b>':''}</span>`}
+  return `<div class="calhead"><button class="btn ghost sm" data-act="cal" data-d="-1" aria-label="Vorheriger Monat">‹</button><b>${MON[calM.m]} ${calM.y}</b><button class="btn ghost sm" data-act="cal" data-d="1" aria-label="Nächster Monat">›</button></div>
+  <div class="calgrid">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(x=>`<span class="cw">${x}</span>`).join('')}${cells}</div>
+  <p class="muted small">Vollständige Tage in diesem Monat: <b>${full}</b> · Tests insgesamt: <b>${total}</b>. ✓ = Test geschafft (ab 5 Aufgaben), ×2 = mehrere Tests an einem Tag.</p>`}
+function rewards(){
+  const g=G(),L=lv(g.xp),pct=Math.round(100*L.cur/L.need);calM=null;
+  view(`<h1>🏆 Belohnungen</h1>
+  <div class="card xpcard big"><div class="lvl"><span class="lvbadge">Lv ${L.L}</span><b>${esc(L.title)}</b><span class="muted small">${g.xp} XP</span></div><div class="bar xp"><i style="width:${pct}%"></i></div><div class="small">Noch ${L.need-L.cur} XP bis Level ${L.L+1} (${esc(TITLES[Math.min(L.L,TITLES.length-1)])})</div></div>
+  <div class="stats"><div><b>🔥 ${streak()}</b><span>Tage in Folge</span></div><div><b>📝 ${testsToday()}</b><span>Tests heute</span></div><div><b>✅ ${g.correct}</b><span>richtig gelöst</span></div><div><b>⚡ ${g.best}</b><span>beste Serie</span></div></div>
+  <h2>Kalender</h2><div class="card" id="cal">${calHTML()}</div>
+  <h2>Abzeichen</h2><div class="badges">${BADGES.map(b=>`<div class="bd ${g.badges[b.id]?'on':''}"><span class="bi">${g.badges[b.id]?b.i:'🔒'}</span><b>${esc(b.n)}</b><span class="small muted">${esc(b.d)}</span></div>`).join('')}</div>
+  <h2>So gibt es XP</h2><div class="card small"><p>Richtige Aufgabe: bis 10 XP. Serie: jede weitere richtige Aufgabe in Folge gibt +2 XP (bis +10). Ein Test (ab 5 Aufgaben) gibt +20 XP. Der erste Test am Tag gibt zusätzlich +5 XP pro Tag in Folge (bis +50). Mehrere Tests pro Tag sind erlaubt. Dieselben Aufgaben nochmal: halbe XP.</p></div>`)}
+
+/* ---------- practice: the learner types / selects, the app judges. The running test is saved after every step, so tab switches and reloads resume it. ---------- */
+let run=null,tm;
+const items=q=>q.parts&&q.parts.length?q.parts:[q];
+const cu=()=>({q:D[cur].qById[run.curQ],t:D[cur].tById[run.curT]});
+const newRun=o=>Object.assign({subject:cur,topic:'',k:0,timed:false,elapsed:0,start:Date.now(),seen:[],n:0,ok:0,hist:[],curQ:null,curT:null,res:[],items:[],fin:false,combo:0,xp:0,mult:1,queue:null,qi:0,reward:null,newBadges:[],counted:false},o);
+function persist(){if(!run)return;run.elapsed=Date.now()-run.start;S.run=run;save()}
 function pickQuestion(topicId,klasse){
   const d=D[cur],pool=d.topics.filter(t=>(!topicId||t.id===topicId)&&(!klasse||t.klasse===klasse)&&(d.qByTopic[t.id]||[]).length);
   if(!pool.length)return null;
   const ws=pool.map(t=>weakness(t)**2+.03);let r=Math.random()*ws.reduce((a,b)=>a+b,0),t=pool[0];
   for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0){t=pool[i];break}}
-  const qs=d.qByTopic[t.id].filter(q=>!run.seen.has(q.id)).sort((a,b)=>{const A=P().q[a.id],B=P().q[b.id];return (A?A.due:0)-(B?B.due:0)});
+  const qs=d.qByTopic[t.id].filter(q=>!run.seen.includes(q.id)).sort((a,b)=>{const A=P().q[a.id],B=P().q[b.id];return (A?A.due:0)-(B?B.due:0)});
   const q=qs[0]||d.qByTopic[t.id][Math.floor(Math.random()*d.qByTopic[t.id].length)];
   return {q,t}
 }
 function practice(qs){
-  run={topic:qs.get('topic')||'',k:+qs.get('k')||0,timed:qs.get('timed')==='1',start:Date.now(),seen:new Set(),n:0,ok:0};
+  if([...qs.keys()].length===0&&S.run&&S.run.subject===cur){run=S.run;run.start=Date.now()-(run.elapsed||0);return run.curQ?renderQ():nextQ()}   // resume
+  run=newRun({topic:qs.get('topic')||'',k:+qs.get('k')||0,timed:qs.get('timed')==='1'});
+  try{history.replaceState(null,'','#/practice')}catch(e){}
   nextQ();
 }
 function nextQ(){
-  if(run.timed&&Date.now()-run.start>SESSION_MIN*60e3)return summary();
-  const x=pickQuestion(run.topic,run.k);if(!x){view('<p>Keine Aufgaben für diese Auswahl.</p>');return}
-  run.cur=x;run.seen.add(x.q.id);run.res=items(x.q).map(()=>null);renderQ()
+  if(run.timed&&Date.now()-run.start>SESSION_MIN*60e3)return finishRun();
+  const d=D[cur];let x;
+  if(run.queue){if(run.qi>=run.queue.length)return finishRun();const [qid,tid]=run.queue[run.qi++];x={q:d.qById[qid],t:d.tById[tid]}}
+  else x=pickQuestion(run.topic,run.k);
+  if(!x){view('<p>Keine Aufgaben für diese Auswahl.</p>');return}
+  run.curQ=x.q.id;run.curT=x.t.id;run.seen.push(x.q.id);
+  run.res=items(x.q).map(()=>null);run.items=items(x.q).map(()=>({vals:null,done:false,skip:false}));run.fin=false;run.reward=null;
+  persist();renderQ()
 }
-const items=q=>q.parts&&q.parts.length?q.parts:[q];
 function fieldHTML(f,i,j){
   const id=`f${i}_${j}`,lab=f.label?`<span class="fl">${esc(f.label)}</span>`:'';
   if(f.k==='choice'){
     const multi=!!f.multi,type=multi?'checkbox':'radio';
-    return `<fieldset class="fld ch" data-j="${j}"><legend>${lab||''}${multi?`<span class="muted small"> ${X('(mehrere möglich)','(more than one possible)')}</span>`:''}</legend>${f.o.map((o,n)=>`<label class="opt"><input type="${type}" name="${id}" value="${n}"><span>${esc(o)}</span></label>`).join('')}</fieldset>`}
-  const hint=f.k==='set'?X('mehrere Werte mit ; trennen','separate several values with ;'):f.k==='primes'?'z. B. 2 · 2 · 3':f.k==='expr'?X('Term eingeben, z. B. 2x - 14','enter a term, e.g. 2x - 14'):'';
-  return `<div class="fld" data-j="${j}"><label for="${id}">${lab}</label><div class="inl"><input type="text" id="${id}" inputmode="${f.k==='num'?'text':'text'}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${esc(f.label||'Antwort')}">${f.unit?`<span class="unit">${esc(f.unit)}</span>`:''}</div>${hint?`<div class="muted small">${hint}</div>`:''}</div>`}
+    return `<fieldset class="fld ch" data-j="${j}"><legend>${lab||''}${multi?`<span class="muted small"> (mehrere möglich)</span>`:''}</legend>${f.o.map((o,n)=>`<label class="opt"><input type="${type}" name="${id}" value="${n}"><span>${esc(o)}</span></label>`).join('')}</fieldset>`}
+  const hint=f.k==='set'?'mehrere Werte mit ; trennen':f.k==='primes'?'z. B. 2 · 2 · 3':f.k==='expr'?'Term eingeben, z. B. 2x - 14':'';
+  return `<div class="fld" data-j="${j}"><label for="${id}">${lab}</label><div class="inl"><input type="text" id="${id}" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${esc(f.label||'Antwort')}">${f.unit?`<span class="unit">${esc(f.unit)}</span>`:''}</div>${hint?`<div class="muted small">${hint}</div>`:''}</div>`}
 function itemHTML(it,i){
   const fs=it.answer.fields;
   return `<div class="card item" data-i="${i}">${it.label?`<b>${esc(it.label)})</b> `:''}<span class="prompt">${esc(it.prompt_de)}</span>
   ${it.answer.ask?`<p class="muted small ask">${esc(it.answer.ask)}</p>`:''}<div class="fields">${fs.map((f,j)=>fieldHTML(f,i,j)).join('')}</div>
-  <div class="row act"><button class="btn" data-act="check">${X('Prüfen','Check')}</button><button class="btn ghost" data-act="skip">${X('Ich weiß es nicht','I do not know')}</button></div>
+  <div class="row act"><button class="btn" data-act="check">Prüfen</button><button class="btn ghost" data-act="skip">Ich weiß es nicht</button></div>
   <div class="out" aria-live="polite"></div></div>`}
 function leadText(q){if(q.lead_de)return q.lead_de;const i=q.prompt_de.search(/(^|\n)\s*a\)/);return i>0?q.prompt_de.slice(0,i).trim():''}
-function renderQ(){
-  const {q,t}=run.cur,its=items(q),lead=q.parts&&q.parts.length?leadText(q):'';
-  view(`<div class="row" style="align-items:center"><span class="tag">${tTitle(t)}</span><span class="muted small">${X('Aufgabe','Task')} ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
-  <h1>${esc(q.title_de)}</h1>${lead?`<p class="prompt muted">${esc(lead)}</p>`:''}${its.map(itemHTML).join('')}
-  <div id="nextbox"></div>
-  <p><a class="muted small" href="#/topic/${t.id}">${X('Erklärung zum Thema ansehen','Read the topic explanation')}</a> · <a class="muted small" href="#/summary" id="stop">${X('Beenden','Finish')}</a></p>`);
-  $('#stop').onclick=e=>{e.preventDefault();summary()};
-  if(run.timed)tick();
-}
-let tm;function tick(){clearInterval(tm);const f=()=>{const e=$('#tm');if(!e){clearInterval(tm);return}const r=Math.max(0,SESSION_MIN*60-Math.floor((Date.now()-run.start)/1000));e.textContent=`${Math.floor(r/60)}:${String(r%60).padStart(2,'0')}`};f();tm=setInterval(f,1000)}
 function readField(f,box){
   if(f.k==='choice')return [...box.querySelectorAll('input:checked')].map(x=>+x.value);
   return box.querySelector('input').value}
 const empty=(f,v)=>f.k==='choice'?!v.length:!String(v).trim();
+const collectVals=(card,it)=>{const boxes=[...card.querySelectorAll('.fld')];return it.answer.fields.map((f,j)=>readField(f,boxes[j]))};
+function fillCard(card,it,vals){if(!vals)return;const boxes=[...card.querySelectorAll('.fld')];it.answer.fields.forEach((f,j)=>{const b=boxes[j],v=vals[j];if(v==null)return;if(f.k==='choice')b.querySelectorAll('input').forEach(x=>{x.checked=v.includes(+x.value)});else b.querySelector('input').value=v})}
+function barHTML(){const total=run.queue?run.queue.length:0;return `<span>⭐ <b id="gx">${run.xp}</b> XP</span><span>🔥 Serie <b id="gc">${run.combo}</b></span><span>Aufgabe ${Math.min(run.n+1,total||run.n+1)}${total?' von '+total:''}</span>${run.timed?'<span class="timer" id="tm"></span>':''}`}
+function updateBar(){const a=$('#gx'),b=$('#gc');if(a)a.textContent=run.xp;if(b)b.textContent=run.combo}
+function renderQ(){
+  const {q,t}=cu(),its=items(q),lead=q.parts&&q.parts.length?leadText(q):'';
+  view(`<div class="gamebar">${barHTML()}</div>
+  <div class="row" style="align-items:center"><span class="tag">${tTitle(t)}</span><span class="tag">${kl(q.klasse||t.klasse)}</span>${q.set?`<span class="tag">${esc(setName(q.set))}</span>`:''}</div>
+  <h1>${esc(q.title_de)}</h1>${lead?`<p class="prompt muted">${esc(lead)}</p>`:''}${its.map(itemHTML).join('')}
+  <div id="nextbox"></div>
+  <p><a class="muted small" href="#/topic/${t.id}">Erklärung zum Thema ansehen</a> · <a class="muted small" href="#/summary" id="stop">Test beenden</a></p>`);
+  $('#stop').onclick=e=>{e.preventDefault();finishRun()};
+  run.items.forEach((st,i)=>{const card=$(`.item[data-i="${i}"]`);if(!card)return;fillCard(card,its[i],st.vals);if(st.done)checkItem(card,i,st.skip,true)});
+  if(run.fin)showNext();
+  if(run.timed)tick();
+}
+function tick(){clearInterval(tm);const f=()=>{const e=$('#tm');if(!e||!run){clearInterval(tm);return}const r=Math.max(0,SESSION_MIN*60-Math.floor((Date.now()-run.start)/1000));e.textContent=`⏱ ${Math.floor(r/60)}:${String(r%60).padStart(2,'0')}`};f();tm=setInterval(f,1000)}
 function answerText(f){return f.ans!=null?String(f.ans):(f.k==='choice'?f.c.map(n=>f.o[n]).join(', '):String(f.v))}
-function checkItem(card,i,skip){
-  const it=items(run.cur.q)[i],fs=it.answer.fields,boxes=[...card.querySelectorAll('.fld')],out=$('.out',card);
+function checkItem(card,i,skip,restore){
+  const it=items(cu().q)[i],fs=it.answer.fields,boxes=[...card.querySelectorAll('.fld')],out=$('.out',card);
   const vals=fs.map((f,j)=>readField(f,boxes[j]));
-  if(!skip&&vals.some((v,j)=>empty(fs[j],v))){out.innerHTML=`<p class="badtxt">${X('Bitte zuerst alle Felder ausfüllen.','Please fill in every field first.')}</p>`;return}
+  if(!skip&&vals.some((v,j)=>empty(fs[j],v))){out.innerHTML=`<p class="badtxt">Bitte zuerst alle Felder ausfüllen.</p>`;return}
   let all=!skip;
   fs.forEach((f,j)=>{
     const r=skip?{ok:false}:Grade.grade(f,vals[j]);all=all&&r.ok;
     const b=boxes[j];b.classList.add(r.ok?'ok':'bad');b.querySelectorAll('input').forEach(x=>x.disabled=true);
-    b.insertAdjacentHTML('beforeend',r.ok?`<div class="verdict good">✓ ${X('Richtig','Correct')}</div>`:`<div class="verdict badtxt">✗ ${X('Richtige Antwort:','Correct answer:')} <b>${esc(answerText(f))}</b>${r.msg&&r.msg!=='?'?` <span class="muted small">(${esc(r.msg)})</span>`:''}</div>`)});
+    b.insertAdjacentHTML('beforeend',r.ok?`<div class="verdict good">✓ Richtig</div>`:`<div class="verdict badtxt">✗ Richtige Antwort: <b>${esc(answerText(f))}</b>${r.msg&&r.msg!=='?'?` <span class="muted small">(${esc(r.msg)})</span>`:''}</div>`)});
   card.querySelector('.act').hidden=true;
-  out.innerHTML=`<p class="${all?'good':'badtxt'}"><b>${all?X('Richtig ✓','Correct ✓'):skip?X('Kein Problem – hier ist die Lösung.','No problem – here is the solution.'):X('Nicht ganz – schau dir die Erklärung an.','Not quite – read the explanation.')}</b></p><div class="sol"><div class="muted small">${X('Erklärung / Lösungsweg','Explanation / solution')}</div>${esc(it.solution_de||'')}</div>`;
-  run.res[i]=all;if(run.res.every(x=>x!==null))finishQ();
+  out.innerHTML=`<p class="${all?'good':'badtxt'}"><b>${all?'Richtig ✓':skip?'Kein Problem – hier ist die Lösung.':'Nicht ganz – schau dir die Erklärung an.'}</b></p><div class="sol"><div class="muted small">Erklärung / Lösungsweg</div>${esc(it.solution_de||'')}</div>`;
+  if(restore)return;
+  run.items[i]={vals,done:true,skip:!!skip};run.res[i]=all;
+  if(run.res.every(x=>x!==null))finishQ();else persist();
 }
 document.addEventListener('click',ev=>{
   const b=ev.target.closest('button[data-act],button[data-next]');if(!b)return;
   if(b.dataset.next){return nextQ()}
-  if(b.dataset.act==='expl'){const box=b.closest('.vc').querySelector('.expl');box.hidden=!box.hidden;b.setAttribute('aria-expanded',String(!box.hidden));return}
-  if(!run||!run.cur)return;
+  const a=b.dataset.act;
+  if(a==='expl'){const box=b.closest('.vc').querySelector('.expl');box.hidden=!box.hidden;b.setAttribute('aria-expanded',String(!box.hidden));return}
+  if(a==='cal'){calM.m+=+b.dataset.d;if(calM.m<0){calM.m=11;calM.y--}if(calM.m>11){calM.m=0;calM.y++}$('#cal').innerHTML=calHTML();return}
+  if(a==='again-same'||a==='again-sim'){return again(a==='again-same')}
+  if(!run||run.curQ==null)return;
   const card=b.closest('.item');if(!card)return;
-  checkItem(card,+card.dataset.i,b.dataset.act==='skip');
+  checkItem(card,+card.dataset.i,a==='skip');
 });
+document.addEventListener('input',ev=>{
+  if(!run||run.curQ==null||!ev.target.closest)return;const card=ev.target.closest('.item');if(!card)return;
+  const i=+card.dataset.i;if(!run.items[i]||run.items[i].done)return;
+  run.items[i].vals=collectVals(card,items(cu().q)[i]);persist()});
 document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.matches('.item input[type=text]')){ev.preventDefault();const c=ev.target.closest('.item'),n=ev.target.closest('.fld').nextElementSibling;if(n&&n.matches('.fld')){n.querySelector('input').focus()}else if(!c.querySelector('.act').hidden)checkItem(c,+c.dataset.i,false)}});
 function finishQ(){
-  const {q,t}=run.cur,ok=run.res.every(Boolean),p=P(),now=Date.now();
+  const {q,t}=cu(),ok=run.res.every(Boolean),frac=run.res.filter(Boolean).length/run.res.length,g=G(),lvB=levelOf(g.xp),p=P(),now=Date.now();
   const s=p.t[t.id]??={n:0,wrong:0};s.n++;if(!ok)s.wrong++;s.last=now;
   const r=p.q[q.id]??={box:0,n:0,ok:0};r.n++;if(ok){r.ok++;r.box=Math.min(4,r.box+1)}else r.box=0;r.due=now+BOX_DAYS[r.box]*DAY;
-  const l=S.log[today()]??={n:0,ok:0};l.n++;if(ok)l.ok++;
-  run.n++;if(ok)run.ok++;save();
-  $('#nextbox').innerHTML=`<button class="btn big" data-next="1">${X('Weiter','Next')}</button>`;
-  $('#nextbox button').scrollIntoView({block:'nearest'});
+  let bonus=0;if(ok){run.combo++;bonus=Math.min(run.combo-1,5)*2}else run.combo=0;
+  const pts=Math.round((10*frac+bonus)*run.mult);
+  const l=S.log[today()]??={n:0,ok:0};l.n++;if(ok)l.ok++;l.xp=(l.xp||0)+pts;
+  g.xp+=pts;run.xp+=pts;if(ok)g.correct++;g.best=Math.max(g.best,run.combo);
+  const nb=awardBadges();run.newBadges.push(...nb.map(b=>b.id));
+  const lvA=levelOf(g.xp);
+  run.reward={pts,ok,combo:run.combo,lv:lvA>lvB?lvA:0,badges:nb.map(b=>b.id)};
+  run.hist.push({q:q.id,t:t.id,ok});run.fin=true;run.n++;if(ok)run.ok++;
+  persist();updateChip();updateBar();showNext();
 }
-function summary(){
-  clearInterval(tm);const r=run||{n:0,ok:0};
-  view(`<h1>${X('Fertig','Done')}</h1><div class="card"><p>${X(`${r.ok} von ${r.n} richtig.`,`${r.ok} of ${r.n} correct.`)}</p><p class="muted">${X('Falsche Aufgaben kommen früher wieder.','Wrong tasks come back sooner.')}</p></div>
-  <div class="row"><a class="btn" href="#/practice?timed=1">${X('Nochmal','Again')}</a><a class="btn ghost" href="#/">${X('Start','Home')}</a></div>`);run=null}
+function showNext(){
+  const r=run.reward||{pts:0,combo:0,badges:[],ok:false},last=run.queue&&run.qi>=run.queue.length;
+  const bd=(r.badges||[]).map(badgeById).filter(Boolean);
+  $('#nextbox').innerHTML=`<div class="reward ${r.pts?'pop':''}"><span class="rp">${r.pts?'✨ +'+r.pts+' XP':'Weiter üben – das schaffst du!'}</span>${r.combo>=2?`<span class="rc">🔥 Serie ×${r.combo}</span>`:''}${r.lv?`<div class="lvup">🎊 Level ${r.lv}! ${esc(lv(G().xp).title)}</div>`:''}${bd.map(b=>`<div class="newbd">${b.i} Neues Abzeichen: <b>${esc(b.n)}</b></div>`).join('')}</div>
+  <button class="btn big" data-next="1">${last?'Ergebnis ansehen':'Weiter'}</button>`;
+  $('#nextbox').scrollIntoView({block:'nearest'});
+}
+function finishRun(){
+  clearInterval(tm);
+  if(!run){return go('#/')}
+  const g=G(),lvB=levelOf(g.xp);let bonus=0,streakB=0,counted=false;
+  if(run.n>=5&&!run.counted){
+    const l=S.log[today()]??={n:0,ok:0},first=!(l.tests>0);
+    l.tests=(l.tests||0)+1;g.tests++;counted=true;run.counted=true;
+    bonus=Math.round(20*run.mult);if(first)streakB=Math.min(streak(),10)*5;
+    g.xp+=bonus+streakB;l.xp=(l.xp||0)+bonus+streakB}
+  const nb=awardBadges();run.newBadges.push(...nb.map(b=>b.id));
+  const pct=run.n?run.ok/run.n:0;
+  S.last={date:today(),n:run.n,ok:run.ok,xp:run.xp,bonus,streakB,counted,stars:run.n===0?0:pct>=.9?3:pct>=.7?2:pct>=.4?1:0,
+    lv:levelOf(g.xp)>lvB?levelOf(g.xp):0,badges:[...new Set(run.newBadges)],hist:run.hist,timed:run.timed,mult:run.mult};
+  S.run=null;run=null;save();updateChip();go('#/summary')}
+function summaryView(){
+  const L=S.last;if(!L)return go('#/');const g=G(),lvl=lv(g.xp),pct=Math.round(100*lvl.cur/lvl.need),bd=(L.badges||[]).map(badgeById).filter(Boolean);
+  const conf=L.stars>=3||L.lv?Array.from({length:14},(_,i)=>`<span class="cf" style="left:${(i*7+3)%100}%;animation-delay:${(i%5)*.25}s">${['🎉','✨','⭐','🎊'][i%4]}</span>`).join(''):'';
+  view(`${conf}<h1>Test beendet</h1>
+  <div class="card center"><div class="stars" aria-label="${L.stars} von 3 Sternen">${[1,2,3].map(i=>`<span class="${i<=L.stars?'on':''}" style="animation-delay:${i*.2}s">${i<=L.stars?'★':'☆'}</span>`).join('')}</div>
+  <p class="big2"><b>${L.ok}</b> von <b>${L.n}</b> richtig</p>
+  <p class="xpgain pop">✨ +${L.xp+L.bonus+L.streakB} XP</p>
+  <p class="muted small">Aufgaben: ${L.xp} XP${L.counted?` · Test geschafft: +${L.bonus} XP${L.streakB?` · Tage in Folge: +${L.streakB} XP`:''}`:''}${L.mult<1?' · Wiederholung: halbe XP':''}</p>
+  ${L.counted?'':'<p class="muted small">Ab 5 Aufgaben zählt der Test für den Kalender.</p>'}</div>
+  <div class="card xpcard"><div class="lvl"><span class="lvbadge">Lv ${lvl.L}</span><b>${esc(lvl.title)}</b><span class="muted small">${g.xp} XP</span></div><div class="bar xp"><i style="width:${pct}%"></i></div><div class="small">Noch ${lvl.need-lvl.cur} XP bis Level ${lvl.L+1}</div></div>
+  ${L.lv?`<div class="card lvup">🎊 Neues Level ${L.lv}: ${esc(TITLES[Math.min(L.lv-1,TITLES.length-1)])}</div>`:''}
+  ${bd.map(b=>`<div class="card newbd">${b.i} Neues Abzeichen: <b>${esc(b.n)}</b> – ${esc(b.d)}</div>`).join('')}
+  <h2>Nochmal?</h2>
+  ${L.hist&&L.hist.length?`<div class="row"><button class="btn" data-act="again-same">🔁 Nochmal: dieselben Aufgaben</button><button class="btn" data-act="again-sim">🎲 Nochmal: ähnliche Aufgaben</button></div>
+  <p class="muted small">Ähnliche Aufgaben: gleiche Themen, andere Fragen. Dieselben Aufgaben geben halbe XP.</p>`:''}
+  <div class="row"><a class="btn ghost" href="#/practice?timed=1">⏱ Neuer 15-Minuten-Test</a><a class="btn ghost" href="#/rewards">🏆 Belohnungen &amp; Kalender</a><a class="btn ghost" href="#/">Start</a></div>`)}
+function again(same){
+  const L=S.last;if(!L||!L.hist||!L.hist.length)return;const d=D[cur],used=new Set(L.hist.map(h=>h.q)),pick=new Set();let queue;
+  if(same)queue=L.hist.map(h=>[h.q,h.t]);
+  else queue=L.hist.map(h=>{
+    const pool=(d.qByTopic[h.t]||[]);
+    let c=pool.filter(q=>!used.has(q.id)&&!pick.has(q.id));
+    if(!c.length){const t=d.tById[h.t];   // few tasks in this topic: use tasks of a neighbouring topic (same area, same Jahrgang)
+      const nb=d.topics.filter(x=>x.id!==h.t&&x.area===t.area&&x.klasse===t.klasse);
+      c=nb.flatMap(x=>d.qByTopic[x.id]||[]).filter(q=>!used.has(q.id)&&!pick.has(q.id))}
+    if(!c.length)c=pool.filter(q=>q.id!==h.q&&!pick.has(q.id));
+    if(!c.length)c=pool;
+    const q=c[Math.floor(Math.random()*c.length)];pick.add(q.id);return [q.id,(q.topics&&q.topics[0])||h.t]});
+  run=newRun({queue,mult:same?.5:1,timed:false});S.run=run;save();go('#/practice')}
 
 /* ---------- vocab ---------- */
 function vocab(q){
@@ -546,12 +704,12 @@ async function route(){
   const h=location.hash.slice(1)||'/',[path,qs]=h.split('?'),q=new URLSearchParams(qs||''),parts=path.split('/').filter(Boolean);
   clearInterval(tm);
   try{await loadSubject(cur)}catch(e){return view(`<p class="badtxt">Inhalt konnte nicht geladen werden: ${esc(e.message)}</p>`)}
-  document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===({'':'home',practice:'practice',topics:'topics',topic:'topics',vocab:'vocab',progress:'progress'}[parts[0]||'']??'home')));
-  const R={'':home,topics:()=>topics(q),topic:()=>topic(parts[1]),practice:()=>practice(q),vocab:()=>vocab(q),progress,summary};
+  document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===({'':'home',practice:'practice',topics:'topics',topic:'topics',vocab:'vocab',progress:'progress',rewards:'rewards',summary:'practice'}[parts[0]||'']??'home')));
+  const R={'':home,topics:()=>topics(q),topic:()=>topic(parts[1]),practice:()=>practice(q),vocab:()=>vocab(q),progress,rewards,summary:summaryView};
   (R[parts[0]||'']||home)();
 }
 async function boot(){
-  S=load();setLang(S.lang||'de');await unlock();index={subjects:DB.subjects};
+  S=load();await unlock();updateChip();index={subjects:DB.subjects};
   const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
   cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
   sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
