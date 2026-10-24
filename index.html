@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -44,6 +44,30 @@ pre{white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:10px;ov
 .timer{font-variant-numeric:tabular-nums;font-weight:700}
 [hidden]{display:none!important}
 
+/* language switch: one span per language, shown by <html data-lang> */
+[data-lang=de] [data-x=en],[data-lang=en] [data-x=de]{display:none!important}
+[data-lang=both] span.en::before{content:" · "}
+[data-lang=both] .tabs .en::before{content:" / "}
+.cols>[data-x]{min-width:0}
+@media(min-width:760px){[data-lang=both] .cols{grid-template-columns:1fr 1fr}}
+.en.sub{color:var(--mute)}
+/* practice fields */
+.fields{margin:10px 0}.fld{margin:10px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.fld.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)}.fld.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.fl{font-weight:600;margin-right:6px}.inl{display:flex;gap:8px;align-items:center}.inl input{flex:1}.unit{color:var(--mute)}
+fieldset.fld legend{padding:0 4px}
+.opt{display:flex;gap:10px;align-items:center;min-height:44px;padding:4px 6px;border-radius:8px;cursor:pointer}.opt input{width:22px;height:22px;flex:none}
+.verdict{margin-top:6px}.act{margin-top:6px}
+/* vocab */
+.vc{padding:10px 0;border-bottom:1px solid var(--line)}.vc:last-child{border:0}
+.vrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.vde{font-weight:600}.vzh{color:var(--mute)}.vrow .btn{margin-left:auto}
+.vrow .ven{font-weight:600;color:var(--pri)}
+.btn.sm{min-height:40px;padding:0 12px;font-size:.9rem}
+.expl{margin-top:8px;border-left:4px solid var(--pri);padding:4px 12px;background:var(--bg)}.expl .en{color:var(--mute);margin-top:4px}
+.expl [data-x=en]::before{content:none!important}
+.tag.warn{border-color:var(--warn);color:var(--warn)}
+[data-lang=both] .btn .en::before{content:none}[data-lang=both] .btn .en{display:block;font-size:.8em;font-weight:400}
+
 </style>
 </head>
 <body>
@@ -56,19 +80,263 @@ pre{white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:10px;ov
 </header>
 <main id="app" tabindex="-1"></main>
 <nav class="tabs" aria-label="Navigation">
-  <a href="#/" data-tab="home">Start</a>
-  <a href="#/practice" data-tab="practice">Üben</a>
-  <a href="#/topics" data-tab="topics">Themen</a>
-  <a href="#/vocab" data-tab="vocab">Wörter</a>
-  <a href="#/progress" data-tab="progress">Stand</a>
+  <a href="#/" data-tab="home"><span data-x="de">Start</span><span data-x="en" class="en">Home</span></a>
+  <a href="#/practice" data-tab="practice"><span data-x="de">Üben</span><span data-x="en" class="en">Practise</span></a>
+  <a href="#/topics" data-tab="topics"><span data-x="de">Themen</span><span data-x="en" class="en">Topics</span></a>
+  <a href="#/vocab" data-tab="vocab"><span data-x="de">Wörter</span><span data-x="en" class="en">Words</span></a>
+  <a href="#/progress" data-tab="progress"><span data-x="de">Stand</span><span data-x="en" class="en">Progress</span></a>
 </nav>
+<script>
+'use strict';
+/* grade.js – checks typed / selected answers. Works in the browser (window.Grade) and in Node (module.exports).
+   A "field" comes from content/<fach>/questions.json (see tools/build_answers.py):
+     {k:'num',   v:number, tol?, unit?, pi?, pct?}      one number (fraction, decimal comma, π and units are accepted)
+     {k:'expr',  v:'2x-14', form?:'expanded'|'factored'|'vertex'}   algebra term (compared as a polynomial)
+     {k:'text',  v:['5√2', ...]}                         short text, any of the listed spellings
+     {k:'primes',v:{"2":2,"3":1,"7":1}}                 prime factorization (any order, 2·2 or 2²)
+     {k:'set',   v:[1,3], none?:true}                    several numbers in any order ("x = 1 oder x = 3", "1; 3", "keine")
+     {k:'choice',o:[...], c:[indices], multi?:true}     selection
+   grade(field, input) -> {ok:boolean, msg?:string}   input = string (or array of indices for 'choice'). */
+(function(root){
+
+const SUP={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+const SUB={'₀':'0','₁':'1','₂':'2','₃':'3','₄':'4','₅':'5','₆':'6','₇':'7','₈':'8','₉':'9'};
+function clean(s){
+  s=String(s==null?'':s).replace(/[−–—‒]/g,'-').replace(/[    ]/g,' ')
+    .replace(/[×·⋅∙]/g,'*').replace(/[÷]/g,':');
+  s=s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g,m=>'^'+[...m].map(c=>SUP[c]).join(''));
+  s=s.replace(/[₀-₉]+/g,m=>[...m].map(c=>SUB[c]).join(''));
+  return s.trim();
+}
+
+/* ---------------- numbers ---------------- */
+function parseNumber(raw,opt){
+  opt=opt||{};
+  let s=clean(raw).toLowerCase();
+  if(!s)return null;
+  let m=s.match(/^([+-]?\d+)\s+(\d+)\s*\/\s*(\d+)\s*[a-zäöü°€%²³ ]*$/);       // mixed number "1 5/12"
+  if(m){const w=+m[1],n=+m[2],d=+m[3];if(!d)return null;return (w<0||/^-/.test(m[1])?-1:1)*(Math.abs(w)+n/d)}
+  s=s.replace(/^[a-zα-ωäöü][a-z0-9α-ω′']{0,2}\s*[=≈]\s*/i,'').replace(/^[≈~]\s*/,'');   // "x = 5", "V = 24 cm³", "≈ 4,9"
+  s=s.replace(/\s+/g,'');
+  let hasPi=/π|(?<![a-z])pi(?![a-z])/.test(s);
+  if(hasPi)s=s.replace(/π|(?<![a-z])pi(?![a-z])/g,'@').replace(/\*?@\*?/g,'@');
+  s=s.replace(/,/g,'.');
+  let pos=0,v;
+  const num='(\\d*\\.?\\d+)';
+  m=s.match(new RegExp('^([+-]?)'+num+'(?:/'+num+')?'));
+  if(m){v=parseFloat(m[2]);if(m[3]!==undefined){const d=parseFloat(m[3]);if(!d)return null;v=v/d}if(m[1]==='-')v=-v;pos=m[0].length}
+  else if(/^[+-]?@/.test(s)){v=1;if(s[0]==='-'){v=-1;pos=1}else if(s[0]==='+')pos=1}
+  else return null;
+  let rest=s.slice(pos);
+  if(hasPi){                       // 90π  or  π90  or  π
+    if(rest[0]==='@'){v*=Math.PI;rest=rest.slice(1);const m2=rest.match(new RegExp('^'+num));if(m2){v*=parseFloat(m2[1]);rest=rest.slice(m2[0].length)}}
+    else return null;
+  }
+  const pct=/%/.test(rest);
+  if(!/^[a-zäöüß°€%²³^0-9.\/]*$/.test(rest))return null;
+  if(/^[0-9.]/.test(rest))return null;                                      // "12 5" is not a number
+  if(pct&&opt.pct)v=v/100;
+  return v;
+}
+function fmtNum(v){return String(Math.round(v*1e6)/1e6).replace('.',',')}
+function numOK(v,exp,tol){tol=tol||0;return Math.abs(v-exp)<=Math.max(tol,Math.abs(exp)*1e-9,1e-9)+1e-12}
+
+/* ---------------- polynomial algebra ---------------- */
+const mono=k=>{const o={};if(k)for(const p of k.split(',')){const[a,b]=p.split(':');o[a]=+b}return o};
+const monoKey=o=>Object.keys(o).filter(k=>o[k]).sort().map(k=>k+':'+o[k]).join(',');
+const P={
+  c:v=>Math.abs(v)<1e-12?new Map():new Map([['',v]]),
+  v:n=>new Map([[n+':1',1]]),
+  add(a,b,sg){const r=new Map(a);for(const[k,x]of b){const y=(r.get(k)||0)+sg*x;if(Math.abs(y)<1e-10)r.delete(k);else r.set(k,y)}return r},
+  mul(a,b){const r=new Map();for(const[ka,x]of a)for(const[kb,y]of b){const A=mono(ka),B=mono(kb);for(const k in B)A[k]=(A[k]||0)+B[k];const k=monoKey(A),z=(r.get(k)||0)+x*y;if(Math.abs(z)<1e-10)r.delete(k);else r.set(k,z)}return r},
+  pow(a,n){let r=P.c(1);for(let i=0;i<n;i++)r=P.mul(r,a);return r},
+  isConst(a){return a.size===0||(a.size===1&&a.has(''))},
+  cval(a){return a.size?a.get(''):0},
+  eq(a,b){const d=P.add(a,b,-1);for(const[,x]of d)if(Math.abs(x)>1e-7)return false;return true},
+};
+function lex(s){
+  const t=[];let i=0;
+  while(i<s.length){
+    const c=s[i];
+    if(c===' '){i++;continue}
+    let m;
+    if((m=s.slice(i).match(/^(\d+[.,]\d+|\d+|[.,]\d+)/))){t.push({t:'n',v:parseFloat(m[1].replace(',','.'))});i+=m[1].length;continue}
+    if(/[a-zA-Z]/.test(c)){t.push({t:'v',v:c});i++;continue}
+    if('+-*/:^()'.includes(c)){t.push({t:c});i++;continue}
+    throw new Error('char '+c);
+  }
+  return t;
+}
+function parsePoly(tokens){
+  let i=0;
+  const peek=()=>tokens[i],next=()=>tokens[i++];
+  function expr(){let r=term();while(peek()&&(peek().t==='+'||peek().t==='-')){const o=next().t;const b=term();r=P.add(r,b,o==='+'?1:-1)}return r}
+  const startsFactor=t=>t&&(t.t==='n'||t.t==='v'||t.t==='(');
+  function term(){
+    let r=unary();
+    for(;;){
+      const t=peek();
+      if(!t)break;
+      if(t.t==='*'){next();r=P.mul(r,unary())}
+      else if(t.t==='/'||t.t===':'){next();const d=unary();if(!P.isConst(d)||Math.abs(P.cval(d))<1e-12)throw new Error('div');r=P.mul(r,P.c(1/P.cval(d)))}
+      else if(startsFactor(t)){r=P.mul(r,power())}
+      else break;
+    }
+    return r;
+  }
+  function unary(){const t=peek();if(t&&t.t==='-'){next();return P.mul(P.c(-1),unary())}if(t&&t.t==='+'){next();return unary()}return power()}
+  function power(){
+    let b=atom();
+    while(peek()&&peek().t==='^'){
+      next();let neg=false;if(peek()&&peek().t==='-'){next();neg=true}
+      const e=peek();
+      if(e&&e.t==='('){next();const x=expr();if(!peek()||peek().t!==')')throw new Error(')');next();if(!P.isConst(x))throw new Error('exp');var n=P.cval(x)}
+      else if(e&&e.t==='n'){next();n=e.v}else throw new Error('exp');
+      if(neg)n=-n;
+      if(n<0||n!==Math.floor(n)||n>12)throw new Error('exp');
+      b=P.pow(b,n);
+    }
+    return b;
+  }
+  function atom(){
+    const t=next();
+    if(!t)throw new Error('end');
+    if(t.t==='n')return P.c(t.v);
+    if(t.t==='v')return P.v(t.v);
+    if(t.t==='('){const x=expr();if(!peek()||peek().t!==')')throw new Error(')');next();return x}
+    throw new Error('atom');
+  }
+  const r=expr();
+  if(i<tokens.length)throw new Error('rest');
+  return r;
+}
+/* split tokens at depth 0 into additive terms */
+function topTerms(tokens){
+  const out=[];let cur=[],d=0;
+  tokens.forEach((t,idx)=>{
+    if(t.t==='(')d++;
+    if(t.t===')')d--;
+    if(d===0&&(t.t==='+'||t.t==='-')&&cur.length&&!['+','-','*','/',':','^','('].includes(cur[cur.length-1].t)){out.push(cur);cur=t.t==='-'?[t]:[]}
+    else cur.push(t);
+  });
+  if(cur.length)out.push(cur);
+  return out;
+}
+function parseExpr(raw){
+  let s=clean(raw).replace(/^\s*(?:[a-zA-Z]\s*(?:\(\s*[a-zA-Z]\s*\))?)\s*=\s*/,'');
+  const tokens=lex(s);
+  if(!tokens.length)throw new Error('empty');
+  const poly=parsePoly(tokens);
+  return {poly,tokens,s};
+}
+function gradeExpr(f,input){
+  let u;
+  try{u=parseExpr(input)}catch(e){return {ok:false,msg:'Das kann ich nicht lesen. Beispiel: 2x - 14 oder (x-3)^2'}}
+  const e=parseExpr(f.v);
+  if(!P.eq(u.poly,e.poly))return {ok:false};
+  const terms=topTerms(u.tokens);
+  if(f.form==='expanded'){
+    if(u.tokens.some(t=>t.t==='('))return {ok:false,msg:'Der Wert stimmt, aber schreibe ohne Klammern (ausmultiplizieren).'};
+    const keys=new Set();
+    for(const tr of terms){const p=parsePoly(tr);if(p.size>1)return {ok:false,msg:'Fasse zusammen.'};const k=p.size?[...p.keys()][0]:'#0';if(keys.has(k))return {ok:false,msg:'Der Wert stimmt, aber fasse gleichartige Glieder noch zusammen.'};keys.add(k)}
+  }
+  if(f.form==='factored'&&(!u.tokens.some(t=>t.t==='(')||terms.length>1))return {ok:false,msg:'Der Wert stimmt, aber schreibe das Ergebnis als Produkt (faktorisiert).'};
+  if(f.form==='vertex'&&(!u.tokens.some(t=>t.t==='(')||terms.length>2))return {ok:false,msg:'Der Wert stimmt, aber schreibe die Scheitelform a(x - d)² + e.'};
+  return {ok:true};
+}
+
+/* ---------------- sets, primes, text ---------------- */
+function parseSet(raw,opt){
+  let s=clean(raw).toLowerCase();
+  if(/^\s*$/.test(s))return null;
+  if(/keine|k\.\s?l\.|∅|\{\s*\}|nicht lösbar|unlösbar/.test(s)&&!/\d/.test(s))return [];
+  s=s.replace(/[a-z]\s*(?:\d\s*)?=\s*/g,' ');
+  s=s.replace(/±\s*([\d.,]+)/g,(m,a)=>a+';-'+a);
+  s=s.replace(/\boder\b|\bund\b|\||\{|\}|\[|\]|;|\//g,';').replace(/,\s+/g,';');
+  const out=[];
+  for(const part of s.split(';')){const t=part.trim();if(!t)continue;const v=parseNumber(t,opt);if(v===null)return null;out.push(v)}
+  return out;
+}
+function uniq(a){const r=[];for(const x of a)if(!r.some(y=>Math.abs(x-y)<1e-9))r.push(x);return r}
+function isPrime(n){if(n<2)return false;for(let i=2;i*i<=n;i++)if(n%i===0)return false;return true}
+function parsePrimes(raw){
+  let s=clean(raw).toLowerCase().replace(/\s+/g,' ').replace(/^[^=]*=\s*(?=\d)/,'');
+  s=s.replace(/\s*\*\s*/g,'*').replace(/\s*\^\s*/g,'^').replace(/\bx\b/g,'*');
+  if(!/\*/.test(s)&&/^\d+(\^\d+)?( \d+(\^\d+)?)+$/.test(s))s=s.replace(/ /g,'*');
+  const res={};
+  for(const f of s.split('*')){
+    const m=f.trim().match(/^(\d+)(?:\^(\d+))?$/);
+    if(!m)return null;
+    const b=+m[1],e=m[2]?+m[2]:1;
+    if(!isPrime(b))return {bad:b};
+    res[b]=(res[b]||0)+e;
+  }
+  return res;
+}
+function normText(s){
+  s=clean(s).toLowerCase().replace(/sqrt|wurzel/g,'√').replace(/[\s*]/g,'').replace(/√\((\d+)\)/g,'√$1').replace(/[.]$/,'').replace(/,/g,'.');
+  return s;
+}
+
+/* ---------------- main ---------------- */
+function grade(f,input){
+  switch(f.k){
+    case 'num':{
+      const v=parseNumber(input,{pct:f.pct});
+      if(v===null)return {ok:false,msg:'Das ist keine Zahl.'};
+      return {ok:numOK(v,f.v,f.tol)};
+    }
+    case 'expr':return gradeExpr(f,input);
+    case 'text':{
+      const n=normText(input);
+      return {ok:f.v.some(a=>normText(a)===n)};
+    }
+    case 'primes':{
+      const r=parsePrimes(input);
+      if(r===null)return {ok:false,msg:'Beispiel: 2^2 * 3 * 7'};
+      if(r.bad)return {ok:false,msg:r.bad+' ist keine Primzahl.'};
+      const ks=Object.keys(f.v);
+      return {ok:ks.length===Object.keys(r).length&&ks.every(k=>r[k]===f.v[k])};
+    }
+    case 'set':{
+      const a=parseSet(input,{pct:false});
+      if(a===null)return {ok:false,msg:'Das kann ich nicht lesen. Beispiel: 1; 3'};
+      const u=uniq(a).sort((x,y)=>x-y),e=uniq(f.v).sort((x,y)=>x-y);
+      return {ok:u.length===e.length&&u.every((x,i)=>numOK(x,e[i],f.tol))};
+    }
+    case 'choice':{
+      const sel=(Array.isArray(input)?input:[input]).map(Number).filter(x=>!isNaN(x)).sort((a,b)=>a-b);
+      if(f.multi){const c=f.c.slice().sort((a,b)=>a-b);return {ok:sel.length===c.length&&sel.every((x,i)=>x===c[i])}}
+      return {ok:sel.length===1&&f.c.includes(sel[0])};
+    }
+  }
+  return {ok:false,msg:'?'};
+}
+/* canonical correct input for a field – used by tests */
+function example(f){
+  switch(f.k){
+    case 'num':return fmtNum(f.v);
+    case 'expr':return f.v;
+    case 'text':return f.v[0];
+    case 'primes':return Object.keys(f.v).map(k=>f.v[k]>1?k+'^'+f.v[k]:k).join('*');
+    case 'set':return f.v.length?f.v.map(fmtNum).join('; '):'keine';
+    case 'choice':return f.multi?f.c.slice():[f.c[0]];
+  }
+}
+const api={grade,example,parseNumber,parseExpr,parseSet,fmtNum};
+if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Grade=api;
+})(typeof window!=='undefined'?window:globalThis);
+
+</script>
 <script>
 'use strict';
 /* Abitur Training – static, no build step. Content: content/<fach>/*.json (see content/index.json). */
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const KEY='abitur.v1', DAY=864e5, BOX_DAYS=[0,1,3,7,14], SESSION_MIN=15;
-const T_UI={de:{start:'Start'},en:{start:'Start'}};
+/* i18n: every UI text is rendered once as two spans; CSS shows the one(s) that match <html data-lang>. Switching the language never re-renders a view, so a running question stays as it is. */
+const X=(de,en,cls)=>en==null||en===''||en===de?esc(de):`<span data-x="de">${esc(de)}</span><span data-x="en" class="en ${cls||''}">${esc(en)}</span>`;
+function setLang(l){if(!['de','en','both'].includes(l))l='de';document.documentElement.dataset.lang=l;if(S){S.lang=l;save()}const el=$('#lang');if(el&&el.value!==l)el.value=l}
 let S, D={}, index, cur;       // state, loaded subject data, content index, current subject id
 
 /* ---------- storage ---------- */
@@ -92,7 +360,7 @@ async function unlock(){
   try{const saved=localStorage.getItem('abitur.key');if(saved){DB=await openBundle(buf,await crypto.subtle.importKey('raw',unb64(saved),'AES-GCM',true,['decrypt']));return}}catch(e){}
   await new Promise(res=>{
     $('.top').hidden=true;document.querySelector('.tabs').hidden=true;
-    view(`<h1>Abitur Training</h1><form class="card" id="gate"><p>Bitte Passwort eingeben.</p><p><input type="password" id="pw" autocomplete="current-password" aria-label="Passwort" autofocus></p><button class="btn big" type="submit">Öffnen</button><p id="gerr" class="badtxt" role="alert"></p></form>`);
+    view(`<h1>Abitur Training</h1><form class="card" id="gate"><p>${X('Bitte Passwort eingeben.','Please enter the password.')}</p><p><input type="password" id="pw" autocomplete="current-password" aria-label="Passwort" autofocus></p><button class="btn big" type="submit">${X('Öffnen','Open')}</button><p id="gerr" class="badtxt" role="alert"></p></form>`);
     $('#gate').onsubmit=async e=>{e.preventDefault();const b=$('#gate button');b.disabled=true;$('#gerr').textContent='';
       try{const k=await deriveKey($('#pw').value,salt);DB=await openBundle(buf,k);
         try{localStorage.setItem('abitur.key',b64(new Uint8Array(await crypto.subtle.exportKey('raw',k))))}catch(_){}
@@ -124,41 +392,49 @@ function blocks(bl){return (bl||[]).map(b=>{
 
 /* ---------- views ---------- */
 const view=h=>{$('#app').innerHTML=h;$('#app').focus({preventScroll:true});window.scrollTo(0,0)};
-function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="Schwäche ${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
+function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
 function weakest(n,klasse){return D[cur].topics.filter(t=>!klasse||t.klasse===klasse).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]).slice(0,n)}
+const tTitle=t=>X(t.title_de,t.title_en);
+const kl=k=>X('Klasse '+k,'Grade '+k);
 
 function home(){
   const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
-  view(`<h1>Hallo!</h1>
-  <a class="btn big" href="#/practice?timed=1">Heute ${SESSION_MIN} Minuten üben</a>
-  <p class="muted small">Heute: ${tl.n} Aufgaben, ${tl.ok} richtig · insgesamt ${answered} beantwortet</p>
-  <h2>Deine größten Schwächen</h2>
-  ${weakest(5).map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${esc(t.title_en)} · Klasse ${t.klasse}</div>${bar(w)}</a>`).join('')}
-  <div class="row"><a class="btn ghost" href="#/topics">Alle Themen</a><a class="btn ghost" href="#/progress">Stand &amp; Sicherung</a></div>`)}
+  view(`<h1>${X('Hallo!','Hello!')}</h1>
+  <a class="btn big" href="#/practice?timed=1">${X(`Heute ${SESSION_MIN} Minuten üben`,`Practise ${SESSION_MIN} minutes today`)}</a>
+  <p class="muted small">${X(`Heute: ${tl.n} Aufgaben, ${tl.ok} richtig · insgesamt ${answered} beantwortet`,`Today: ${tl.n} tasks, ${tl.ok} correct · ${answered} answered in total`)}</p>
+  <h2>${X('Deine größten Schwächen','Your biggest weaknesses')}</h2>
+  ${weakest(5).map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${tTitle(t)}</div><div class="muted small">${kl(t.klasse)}</div>${bar(w)}</a>`).join('')}
+  <div class="row"><a class="btn ghost" href="#/topics">${X('Alle Themen','All topics')}</a><a class="btn ghost" href="#/progress">${X('Stand & Sicherung','Progress & backup')}</a></div>`)}
 
 function topics(q){
   const d=D[cur],k=+q.get('k')||0;
   const list=d.topics.filter(t=>!k||t.klasse===k).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]);
-  view(`<h1>Themen</h1><div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/topics${x?'?k='+x:''}">${x?'Klasse '+x:'Alle'}</a>`).join('')}</div>
-  ${list.map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${esc(t.title_en)} · Klasse ${t.klasse} · ${(d.qByTopic[t.id]||[]).length} Aufgaben</div>${bar(w)}</a>`).join('')}`)}
+  view(`<h1>${X('Themen','Topics')}</h1><div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/topics${x?'?k='+x:''}">${x?kl(x):X('Alle','All')}</a>`).join('')}</div>
+  ${list.map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${tTitle(t)}</div><div class="muted small">${kl(t.klasse)} · ${X(`${(d.qByTopic[t.id]||[]).length} Aufgaben`,`${(d.qByTopic[t.id]||[]).length} tasks`)}</div>${bar(w)}</a>`).join('')}`)}
+
+function vocabCard(v){
+  return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span>
+  <button class="btn ghost sm" data-act="expl" aria-expanded="false">${X('Erklärung','Explanation')}</button></div>
+  ${v.lost_points?`<span class="tag warn">${X(`${v.lost_points} Punkte im Test verloren`,`${v.lost_points} points lost in the test`)}</span>`:''}
+  <div class="expl" hidden><div data-x="de">${esc(v.expl_de||'')}</div><div data-x="en" class="en">${esc(v.expl_en||'')}</div></div></div>`}
 
 function topic(id){
   const d=D[cur],t=d.tById[id];if(!t)return view('<p>Thema nicht gefunden.</p>');
-  const L=t.lesson||{},lang=S.lang,vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
-  const de=`<div><h2>Wissen (DE)</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<div><h2>Knowledge (EN)</h2>${blocks(L.knowledge_en)}</div>`:'';
-  view(`<h1>${esc(t.title_de)}</h1><div class="muted">${esc(t.title_en)}</div>
-  <p><span class="tag">Klasse ${t.klasse}</span><span class="tag">${t.error_type==='careless'?'Flüchtigkeit':'Verständnis'}</span><span class="tag">${t.points_lost??0} Punkte verloren</span></p>
+  const L=t.lesson||{},vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
+  const de=`<div data-x="de"><h2>Wissen (DE)</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<div data-x="en" class="en"><h2>Knowledge (EN)</h2>${blocks(L.knowledge_en)}</div>`:'';
+  view(`<h1>${tTitle(t)}</h1>
+  <p><span class="tag">${kl(t.klasse)}</span><span class="tag">${t.error_type==='careless'?X('Flüchtigkeit','careless mistakes'):X('Verständnis','understanding')}</span><span class="tag">${X(`${t.points_lost??0} Punkte verloren`,`${t.points_lost??0} points lost`)}</span></p>
   ${bar(weakness(t))}
-  <p><a class="btn" href="#/practice?topic=${t.id}">Dieses Thema üben</a></p>
-  <details class="card" open><summary><b>Beispiel (Aufgabe aus dem Test)</b></summary>${blocks(L.worked_example_de)}</details>
-  <div class="cols ${lang==='both'?'two':''}">${lang==='en'?en:lang==='de'?de:de+en}</div>
-  ${vocab.length?`<h2>Wörter</h2><div class="card">${vocab.map(v=>`<div>${esc(v.de)} · <b>${esc(v.en)}</b> · ${esc(v.zh)}</div>`).join('')}</div>`:''}
+  <p><a class="btn" href="#/practice?topic=${t.id}">${X('Dieses Thema üben','Practise this topic')}</a></p>
+  <details class="card" open><summary><b>${X('Beispiel (Aufgabe aus dem Test)','Example (task from the test)')}</b></summary>${blocks(L.worked_example_de)}</details>
+  <div class="cols">${de}${en}</div>
+  ${vocab.length?`<h2>${X('Wörter','Words')}</h2><div class="card">${vocab.map(vocabCard).join('')}</div>`:''}
   ${t.curriculum&&t.curriculum.doc?`<p class="muted small">Lehrplan: ${esc(t.curriculum.doc)}${t.curriculum.verified?'':' (Seitenangabe noch nicht geprüft)'}</p>`:''}`)}
 
-/* ---------- practice ---------- */
+/* ---------- practice: the learner types / selects, the app judges ---------- */
 let run=null;
 function pickQuestion(topicId,klasse){
-  const d=D[cur],now=Date.now(),pool=d.topics.filter(t=>(!topicId||t.id===topicId)&&(!klasse||t.klasse===klasse)&&(d.qByTopic[t.id]||[]).length);
+  const d=D[cur],pool=d.topics.filter(t=>(!topicId||t.id===topicId)&&(!klasse||t.klasse===klasse)&&(d.qByTopic[t.id]||[]).length);
   if(!pool.length)return null;
   const ws=pool.map(t=>weakness(t)**2+.03);let r=Math.random()*ws.reduce((a,b)=>a+b,0),t=pool[0];
   for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0){t=pool[i];break}}
@@ -173,85 +449,94 @@ function practice(qs){
 function nextQ(){
   if(run.timed&&Date.now()-run.start>SESSION_MIN*60e3)return summary();
   const x=pickQuestion(run.topic,run.k);if(!x){view('<p>Keine Aufgaben für diese Auswahl.</p>');return}
-  run.cur=x;run.seen.add(x.q.id);run.res=x.q.parts&&x.q.parts.length?x.q.parts.map(()=>null):[null];renderQ()
+  run.cur=x;run.seen.add(x.q.id);run.res=items(x.q).map(()=>null);renderQ()
 }
-function parseNum(s){
-  s=String(s).trim().replace(/[\s  ]/g,'').replace(/−/g,'-').replace(/,/g,'.');
-  let m=s.match(/^(-?[\d.]+)\/([\d.]+)$/);if(m)return +m[1]/+m[2];
-  m=s.match(/^-?[\d.]+(e-?\d+)?/i);return m?parseFloat(m[0]):NaN}
-function numOK(c,inp){const v=parseNum(inp);if(isNaN(v))return false;return Math.abs(v-c.value)<=Math.max(.005,Math.abs(c.value)*.005)}
-function itemHTML(label,prompt,chk,i,sol){
-  const num=chk&&chk.mode==='number';
-  return `<div class="card" data-i="${i}">${label?`<b>${esc(label)})</b> `:''}<span class="prompt">${esc(prompt)}</span>
-  ${num?`<p><input type="text" inputmode="decimal" autocomplete="off" aria-label="Antwort" placeholder="Antwort${chk.unit?' in '+esc(chk.unit):''}"></p>
-  <button class="btn" data-act="check">Prüfen</button> `:''}
-  <button class="btn ghost" data-act="show">Lösung zeigen</button>
-  <div class="out"></div></div>`}
+const items=q=>q.parts&&q.parts.length?q.parts:[q];
+function fieldHTML(f,i,j){
+  const id=`f${i}_${j}`,lab=f.label?`<span class="fl">${esc(f.label)}</span>`:'';
+  if(f.k==='choice'){
+    const multi=!!f.multi,type=multi?'checkbox':'radio';
+    return `<fieldset class="fld ch" data-j="${j}"><legend>${lab||''}${multi?`<span class="muted small"> ${X('(mehrere möglich)','(more than one possible)')}</span>`:''}</legend>${f.o.map((o,n)=>`<label class="opt"><input type="${type}" name="${id}" value="${n}"><span>${esc(o)}</span></label>`).join('')}</fieldset>`}
+  const hint=f.k==='set'?X('mehrere Werte mit ; trennen','separate several values with ;'):f.k==='primes'?'z. B. 2 · 2 · 3':f.k==='expr'?X('Term eingeben, z. B. 2x - 14','enter a term, e.g. 2x - 14'):'';
+  return `<div class="fld" data-j="${j}"><label for="${id}">${lab}</label><div class="inl"><input type="text" id="${id}" inputmode="${f.k==='num'?'text':'text'}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${esc(f.label||'Antwort')}">${f.unit?`<span class="unit">${esc(f.unit)}</span>`:''}</div>${hint?`<div class="muted small">${hint}</div>`:''}</div>`}
+function itemHTML(it,i){
+  const fs=it.answer.fields;
+  return `<div class="card item" data-i="${i}">${it.label?`<b>${esc(it.label)})</b> `:''}<span class="prompt">${esc(it.prompt_de)}</span>
+  ${it.answer.ask?`<p class="muted small ask">${esc(it.answer.ask)}</p>`:''}<div class="fields">${fs.map((f,j)=>fieldHTML(f,i,j)).join('')}</div>
+  <div class="row act"><button class="btn" data-act="check">${X('Prüfen','Check')}</button><button class="btn ghost" data-act="skip">${X('Ich weiß es nicht','I do not know')}</button></div>
+  <div class="out" aria-live="polite"></div></div>`}
+function leadText(q){if(q.lead_de)return q.lead_de;const i=q.prompt_de.search(/(^|\n)\s*a\)/);return i>0?q.prompt_de.slice(0,i).trim():''}
 function renderQ(){
-  const {q,t}=run.cur,elapsed=Math.floor((Date.now()-run.start)/1000);
-  const items=q.parts&&q.parts.length?q.parts.map((p,i)=>itemHTML(p.label,p.prompt_de,p.check,i)):[itemHTML('',q.prompt_de,q.check,0)];
-  const lead=q.parts&&q.parts.length?`<p class="prompt muted small">${esc(leadText(q))}</p>`:'';
-  view(`<div class="row" style="align-items:center"><span class="tag">${esc(t.title_de)}</span><span class="muted small">Aufgabe ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
-  <h1>${esc(q.title_de)}</h1>${lead}${items.join('')}
+  const {q,t}=run.cur,its=items(q),lead=q.parts&&q.parts.length?leadText(q):'';
+  view(`<div class="row" style="align-items:center"><span class="tag">${tTitle(t)}</span><span class="muted small">${X('Aufgabe','Task')} ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
+  <h1>${esc(q.title_de)}</h1>${lead?`<p class="prompt muted">${esc(lead)}</p>`:''}${its.map(itemHTML).join('')}
   <div id="nextbox"></div>
-  <p><a class="muted small" href="#/topic/${t.id}">Erklärung zum Thema ansehen</a> · <a class="muted small" href="#/summary" id="stop">Beenden</a></p>`);
+  <p><a class="muted small" href="#/topic/${t.id}">${X('Erklärung zum Thema ansehen','Read the topic explanation')}</a> · <a class="muted small" href="#/summary" id="stop">${X('Beenden','Finish')}</a></p>`);
   $('#stop').onclick=e=>{e.preventDefault();summary()};
   if(run.timed)tick();
-  $('#app').onclick=onQClick;
 }
-function leadText(q){const i=q.prompt_de.search(/(^|\n)\s*a\)/);return i>0?q.prompt_de.slice(0,i).trim():''}
 let tm;function tick(){clearInterval(tm);const f=()=>{const e=$('#tm');if(!e){clearInterval(tm);return}const r=Math.max(0,SESSION_MIN*60-Math.floor((Date.now()-run.start)/1000));e.textContent=`${Math.floor(r/60)}:${String(r%60).padStart(2,'0')}`};f();tm=setInterval(f,1000)}
-function onQClick(ev){
-  const b=ev.target.closest('button[data-act],button[data-grade],button[data-next]');if(!b)return;
-  const {q}=run.cur,card=b.closest('.card'),i=card?+card.dataset.i:0,item=q.parts&&q.parts.length?q.parts[i]:q,out=card&&$('.out',card);
-  if(b.dataset.next){return nextQ()}
-  if(b.dataset.act==='check'){
-    const ok=numOK(item.check,$('input',card).value);
-    out.innerHTML=`<p class="${ok?'good':'badtxt'}"><b>${ok?'Richtig ✓':'Nicht ganz ✗'}</b></p><div class="sol">${esc(item.solution_de)}</div>`;
-    card.querySelectorAll('button').forEach(x=>x.hidden=true);setRes(i,ok);
-  }else if(b.dataset.act==='show'){
-    card.querySelectorAll('button[data-act]').forEach(x=>x.hidden=true);
-    out.innerHTML=`<div class="sol">${esc(item.solution_de||'')}</div><div class="row"><button class="btn ok" data-grade="1">Richtig</button><button class="btn bad" data-grade="0">Falsch / unsicher</button></div>`;
-  }else if(b.dataset.grade!==undefined){
-    $('.row',out).remove();setRes(i,b.dataset.grade==='1');
-    out.insertAdjacentHTML('afterbegin',`<p class="${b.dataset.grade==='1'?'good':'badtxt'}">${b.dataset.grade==='1'?'Gemerkt: richtig ✓':'Gemerkt: üben wir nochmal'}</p>`);
-  }
+function readField(f,box){
+  if(f.k==='choice')return [...box.querySelectorAll('input:checked')].map(x=>+x.value);
+  return box.querySelector('input').value}
+const empty=(f,v)=>f.k==='choice'?!v.length:!String(v).trim();
+function answerText(f){return f.ans!=null?String(f.ans):(f.k==='choice'?f.c.map(n=>f.o[n]).join(', '):String(f.v))}
+function checkItem(card,i,skip){
+  const it=items(run.cur.q)[i],fs=it.answer.fields,boxes=[...card.querySelectorAll('.fld')],out=$('.out',card);
+  const vals=fs.map((f,j)=>readField(f,boxes[j]));
+  if(!skip&&vals.some((v,j)=>empty(fs[j],v))){out.innerHTML=`<p class="badtxt">${X('Bitte zuerst alle Felder ausfüllen.','Please fill in every field first.')}</p>`;return}
+  let all=!skip;
+  fs.forEach((f,j)=>{
+    const r=skip?{ok:false}:Grade.grade(f,vals[j]);all=all&&r.ok;
+    const b=boxes[j];b.classList.add(r.ok?'ok':'bad');b.querySelectorAll('input').forEach(x=>x.disabled=true);
+    b.insertAdjacentHTML('beforeend',r.ok?`<div class="verdict good">✓ ${X('Richtig','Correct')}</div>`:`<div class="verdict badtxt">✗ ${X('Richtige Antwort:','Correct answer:')} <b>${esc(answerText(f))}</b>${r.msg&&r.msg!=='?'?` <span class="muted small">(${esc(r.msg)})</span>`:''}</div>`)});
+  card.querySelector('.act').hidden=true;
+  out.innerHTML=`<p class="${all?'good':'badtxt'}"><b>${all?X('Richtig ✓','Correct ✓'):skip?X('Kein Problem – hier ist die Lösung.','No problem – here is the solution.'):X('Nicht ganz – schau dir die Erklärung an.','Not quite – read the explanation.')}</b></p><div class="sol"><div class="muted small">${X('Erklärung / Lösungsweg','Explanation / solution')}</div>${esc(it.solution_de||'')}</div>`;
+  run.res[i]=all;if(run.res.every(x=>x!==null))finishQ();
 }
-function setRes(i,ok){run.res[i]=!!ok;if(run.res.every(x=>x!==null))finishQ()}
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-act],button[data-next]');if(!b)return;
+  if(b.dataset.next){return nextQ()}
+  if(b.dataset.act==='expl'){const box=b.closest('.vc').querySelector('.expl');box.hidden=!box.hidden;b.setAttribute('aria-expanded',String(!box.hidden));return}
+  if(!run||!run.cur)return;
+  const card=b.closest('.item');if(!card)return;
+  checkItem(card,+card.dataset.i,b.dataset.act==='skip');
+});
+document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.matches('.item input[type=text]')){ev.preventDefault();const c=ev.target.closest('.item'),n=ev.target.closest('.fld').nextElementSibling;if(n&&n.matches('.fld')){n.querySelector('input').focus()}else if(!c.querySelector('.act').hidden)checkItem(c,+c.dataset.i,false)}});
 function finishQ(){
   const {q,t}=run.cur,ok=run.res.every(Boolean),p=P(),now=Date.now();
   const s=p.t[t.id]??={n:0,wrong:0};s.n++;if(!ok)s.wrong++;s.last=now;
   const r=p.q[q.id]??={box:0,n:0,ok:0};r.n++;if(ok){r.ok++;r.box=Math.min(4,r.box+1)}else r.box=0;r.due=now+BOX_DAYS[r.box]*DAY;
   const l=S.log[today()]??={n:0,ok:0};l.n++;if(ok)l.ok++;
   run.n++;if(ok)run.ok++;save();
-  $('#nextbox').innerHTML=`<button class="btn big" data-next="1">Weiter</button>`;
+  $('#nextbox').innerHTML=`<button class="btn big" data-next="1">${X('Weiter','Next')}</button>`;
   $('#nextbox button').scrollIntoView({block:'nearest'});
 }
 function summary(){
   clearInterval(tm);const r=run||{n:0,ok:0};
-  view(`<h1>Fertig</h1><div class="card"><p><b>${r.ok}</b> von <b>${r.n}</b> richtig.</p><p class="muted">Falsche Aufgaben kommen früher wieder.</p></div>
-  <div class="row"><a class="btn" href="#/practice?timed=1">Nochmal</a><a class="btn ghost" href="#/">Start</a></div>`);run=null}
+  view(`<h1>${X('Fertig','Done')}</h1><div class="card"><p>${X(`${r.ok} von ${r.n} richtig.`,`${r.ok} of ${r.n} correct.`)}</p><p class="muted">${X('Falsche Aufgaben kommen früher wieder.','Wrong tasks come back sooner.')}</p></div>
+  <div class="row"><a class="btn" href="#/practice?timed=1">${X('Nochmal','Again')}</a><a class="btn ghost" href="#/">${X('Start','Home')}</a></div>`);run=null}
 
 /* ---------- vocab ---------- */
 function vocab(q){
   const d=D[cur],k=+q.get('k')||0,s=(q.get('s')||'').toLowerCase();
   const list=d.vocab.filter(v=>(!k||v.klasse===k)&&(!s||[v.de,v.en,v.zh].join(' ').toLowerCase().includes(s)));
-  view(`<h1>Wörter DE · EN · 中文</h1><input type="text" id="vs" placeholder="Suchen / Search / 搜索" value="${esc(s)}">
-  <div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/vocab?k=${x}&s=${encodeURIComponent(s)}">${x?'Klasse '+x:'Alle'}</a>`).join('')}</div>
-  <p class="muted small">${list.length} Wörter</p>
-  <div class="card tablewrap"><table><tbody>${list.map(v=>`<tr><td>${esc(v.de)}</td><td><b>${esc(v.en)}</b></td><td>${esc(v.zh)}</td></tr>`).join('')}</tbody></table></div>`);
+  view(`<h1>${X('Wörter','Words')} DE · EN · 中文</h1><input type="text" id="vs" placeholder="Suchen / Search / 搜索" value="${esc(s)}">
+  <div class="chips">${[0,...d.klassen].map(x=>`<a class="chip ${x===k?'on':''}" href="#/vocab?k=${x}&s=${encodeURIComponent(s)}">${x?kl(x):X('Alle','All')}</a>`).join('')}</div>
+  <p class="muted small">${X(`${list.length} Wörter`,`${list.length} words`)}</p>
+  <div class="card">${list.map(vocabCard).join('')}</div>`);
   $('#vs').onchange=e=>{location.hash=`#/vocab?k=${k}&s=${encodeURIComponent(e.target.value)}`};
 }
 
 /* ---------- progress / backup ---------- */
 function progress(){
   const d=D[cur],days=Object.keys(S.log).sort().slice(-14);
-  view(`<h1>Stand</h1>
-  <h2>Themen nach Schwäche</h2>${weakest(99).map(([t,w])=>{const s=P().t[t.id]||{n:0};return `<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${s.n} beantwortet · Schwäche ${Math.round(w*100)} %</div>${bar(w)}</a>`}).join('')}
-  <h2>Letzte Tage</h2><div class="card">${days.length?days.map(x=>`<div>${x}: ${S.log[x].ok}/${S.log[x].n} richtig</div>`).join(''):'<span class="muted">Noch nichts geübt.</span>'}</div>
-  <h2>Sicherung</h2><div class="card"><p class="small muted">Der Fortschritt liegt nur in diesem Browser. Sichere ihn regelmäßig.</p>
-  <div class="row"><button class="btn" id="exp">Exportieren</button><label class="btn ghost">Importieren<input id="imp" type="file" accept="application/json" hidden></label><button class="btn ghost" id="rst">Zurücksetzen</button></div></div>
-  <p><button class="btn ghost" id="lck">Sperren (Passwort neu eingeben)</button></p>`);
+  view(`<h1>${X('Stand','Progress')}</h1>
+  <h2>${X('Themen nach Schwäche','Topics by weakness')}</h2>${weakest(99).map(([t,w])=>{const s=P().t[t.id]||{n:0};return `<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${X(`${s.n} beantwortet · Schwäche ${Math.round(w*100)} %`,`${s.n} answered · weakness ${Math.round(w*100)} %`)}</div>${bar(w)}</a>`}).join('')}
+  <h2>${X('Letzte Tage','Last days')}</h2><div class="card">${days.length?days.map(x=>`<div>${x}: ${S.log[x].ok}/${S.log[x].n} ${X('richtig','correct')}</div>`).join(''):`<span class="muted">${X('Noch nichts geübt.','Nothing practised yet.')}</span>`}</div>
+  <h2>${X('Sicherung','Backup')}</h2><div class="card"><p class="small muted">${X('Der Fortschritt liegt nur in diesem Browser. Sichere ihn regelmäßig.','Your progress is stored in this browser only. Back it up often.')}</p>
+  <div class="row"><button class="btn" id="exp">${X('Exportieren','Export')}</button><label class="btn ghost">${X('Importieren','Import')}<input id="imp" type="file" accept="application/json" hidden></label><button class="btn ghost" id="rst">${X('Zurücksetzen','Reset')}</button></div></div>
+  <p><button class="btn ghost" id="lck">${X('Sperren (Passwort neu eingeben)','Lock (enter password again)')}</button></p>`);
   $('#lck').onclick=lock;
   $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download=`abitur-fortschritt-${today()}.json`;a.click()};
   $('#imp').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(x.v!==1)throw 0;S=x;save();alert('Importiert.');route()}catch(_){alert('Datei passt nicht.')}};
@@ -261,18 +546,18 @@ function progress(){
 /* ---------- router ---------- */
 async function route(){
   const h=location.hash.slice(1)||'/',[path,qs]=h.split('?'),q=new URLSearchParams(qs||''),parts=path.split('/').filter(Boolean);
-  clearInterval(tm);$('#app').onclick=null;
+  clearInterval(tm);
   try{await loadSubject(cur)}catch(e){return view(`<p class="badtxt">Inhalt konnte nicht geladen werden: ${esc(e.message)}</p>`)}
   document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',a.dataset.tab===({'':'home',practice:'practice',topics:'topics',topic:'topics',vocab:'vocab',progress:'progress'}[parts[0]||'']??'home')));
   const R={'':home,topics:()=>topics(q),topic:()=>topic(parts[1]),practice:()=>practice(q),vocab:()=>vocab(q),progress,summary};
   (R[parts[0]||'']||home)();
 }
 async function boot(){
-  S=load();await unlock();index={subjects:DB.subjects};
+  S=load();setLang(S.lang||'de');await unlock();index={subjects:DB.subjects};
   const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
   cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
   sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
-  $('#lang').value=S.lang||'de';$('#lang').onchange=e=>{S.lang=e.target.value;save();route()};
+  $('#lang').onchange=e=>setLang(e.target.value);
   window.addEventListener('hashchange',route);route();
   if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
