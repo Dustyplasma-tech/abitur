@@ -67,6 +67,7 @@ fieldset.fld legend{padding:0 4px}
 .expl [data-x=en]::before{content:none!important}
 .tag.warn{border-color:var(--warn);color:var(--warn)}
 [data-lang=both] .btn .en::before{content:none}[data-lang=both] .btn .en{display:block;font-size:.8em;font-weight:400}
+.expl .en2{color:var(--mute);margin-top:4px;font-size:.92rem}
 
 </style>
 </head>
@@ -74,17 +75,14 @@ fieldset.fld legend{padding:0 4px}
 <header class="top">
   <a class="brand" href="#/">Abitur&nbsp;Training</a>
   <select id="subject" aria-label="Fach / Subject"></select>
-  <select id="lang" aria-label="Sprache / Language">
-    <option value="de">DE</option><option value="en">EN</option><option value="both">DE | EN</option>
-  </select>
 </header>
 <main id="app" tabindex="-1"></main>
 <nav class="tabs" aria-label="Navigation">
-  <a href="#/" data-tab="home"><span data-x="de">Start</span><span data-x="en" class="en">Home</span></a>
-  <a href="#/practice" data-tab="practice"><span data-x="de">Üben</span><span data-x="en" class="en">Practise</span></a>
-  <a href="#/topics" data-tab="topics"><span data-x="de">Themen</span><span data-x="en" class="en">Topics</span></a>
-  <a href="#/vocab" data-tab="vocab"><span data-x="de">Wörter</span><span data-x="en" class="en">Words</span></a>
-  <a href="#/progress" data-tab="progress"><span data-x="de">Stand</span><span data-x="en" class="en">Progress</span></a>
+  <a href="#/" data-tab="home">Start</a>
+  <a href="#/practice" data-tab="practice">Üben</a>
+  <a href="#/topics" data-tab="topics">Themen</a>
+  <a href="#/vocab" data-tab="vocab">Wörter</a>
+  <a href="#/progress" data-tab="progress">Stand</a>
 </nav>
 <script>
 'use strict';
@@ -335,8 +333,8 @@ const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const KEY='abitur.v1', DAY=864e5, BOX_DAYS=[0,1,3,7,14], SESSION_MIN=15;
 /* i18n: every UI text is rendered once as two spans; CSS shows the one(s) that match <html data-lang>. Switching the language never re-renders a view, so a running question stays as it is. */
-const X=(de,en,cls)=>en==null||en===''||en===de?esc(de):`<span data-x="de">${esc(de)}</span><span data-x="en" class="en ${cls||''}">${esc(en)}</span>`;
-function setLang(l){if(!['de','en','both'].includes(l))l='de';document.documentElement.dataset.lang=l;if(S){S.lang=l;save()}const el=$('#lang');if(el&&el.value!==l)el.value=l}
+const X=(de)=>esc(de);   // German only (no language switch)
+function setLang(){}
 let S, D={}, index, cur;       // state, loaded subject data, content index, current subject id
 
 /* ---------- storage ---------- */
@@ -394,8 +392,8 @@ function blocks(bl){return (bl||[]).map(b=>{
 const view=h=>{$('#app').innerHTML=h;$('#app').focus({preventScroll:true});window.scrollTo(0,0)};
 function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
 function weakest(n,klasse){return D[cur].topics.filter(t=>!klasse||t.klasse===klasse).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]).slice(0,n)}
-const tTitle=t=>X(t.title_de,t.title_en);
-const kl=k=>X('Klasse '+k,'Grade '+k);
+const tTitle=t=>esc(t.title_de);
+const kl=k=>'Klasse '+k;
 
 function home(){
   const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
@@ -416,18 +414,18 @@ function vocabCard(v){
   return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span>
   <button class="btn ghost sm" data-act="expl" aria-expanded="false">${X('Erklärung','Explanation')}</button></div>
   ${v.lost_points?`<span class="tag warn">${X(`${v.lost_points} Punkte im Test verloren`,`${v.lost_points} points lost in the test`)}</span>`:''}
-  <div class="expl" hidden><div data-x="de">${esc(v.expl_de||'')}</div><div data-x="en" class="en">${esc(v.expl_en||'')}</div></div></div>`}
+  <div class="expl" hidden><div>${esc(v.expl_de||'')}</div><div class="en2">${esc(v.expl_en||'')}</div></div></div>`}
 
 function topic(id){
   const d=D[cur],t=d.tById[id];if(!t)return view('<p>Thema nicht gefunden.</p>');
   const L=t.lesson||{},vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
-  const de=`<div data-x="de"><h2>Wissen (DE)</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<div data-x="en" class="en"><h2>Knowledge (EN)</h2>${blocks(L.knowledge_en)}</div>`:'';
+  const de=`<div><h2>Wissen</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version</b></summary>${blocks(L.knowledge_en)}</details>`:'';
   view(`<h1>${tTitle(t)}</h1>
   <p><span class="tag">${kl(t.klasse)}</span><span class="tag">${t.error_type==='careless'?X('Flüchtigkeit','careless mistakes'):X('Verständnis','understanding')}</span><span class="tag">${X(`${t.points_lost??0} Punkte verloren`,`${t.points_lost??0} points lost`)}</span></p>
   ${bar(weakness(t))}
   <p><a class="btn" href="#/practice?topic=${t.id}">${X('Dieses Thema üben','Practise this topic')}</a></p>
   <details class="card" open><summary><b>${X('Beispiel (Aufgabe aus dem Test)','Example (task from the test)')}</b></summary>${blocks(L.worked_example_de)}</details>
-  <div class="cols">${de}${en}</div>
+  ${de}${en}
   ${vocab.length?`<h2>${X('Wörter','Words')}</h2><div class="card">${vocab.map(vocabCard).join('')}</div>`:''}
   ${t.curriculum&&t.curriculum.doc?`<p class="muted small">Lehrplan: ${esc(t.curriculum.doc)}${t.curriculum.verified?'':' (Seitenangabe noch nicht geprüft)'}</p>`:''}`)}
 
@@ -557,7 +555,7 @@ async function boot(){
   const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
   cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
   sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
-  $('#lang').onchange=e=>setLang(e.target.value);
+  
   window.addEventListener('hashchange',route);route();
   if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
