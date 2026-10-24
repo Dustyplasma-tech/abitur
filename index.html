@@ -393,7 +393,9 @@ const view=h=>{$('#app').innerHTML=h;$('#app').focus({preventScroll:true});windo
 function bar(w){return `<div class="bar ${w<.35?'good':''}" role="img" aria-label="${Math.round(w*100)}%"><i style="width:${Math.round(w*100)}%"></i></div>`}
 function weakest(n,klasse){return D[cur].topics.filter(t=>!klasse||t.klasse===klasse).map(t=>[t,weakness(t)]).sort((a,b)=>b[1]-a[1]).slice(0,n)}
 const tTitle=t=>esc(t.title_de);
-const kl=k=>'Klasse '+k;
+const kl=k=>'Jg. '+k;
+const SETN={fehlerheft:'Fehlerheft',testA:'Test A',testB:'Test B',testC:'Test C',foerder:'Förderblatt',diagnose:'Diagnose'};
+const setName=x=>SETN[x]||x||'';
 
 function home(){
   const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
@@ -411,7 +413,7 @@ function topics(q){
   ${list.map(([t,w])=>`<a class="card topic" href="#/topic/${t.id}"><div class="t">${tTitle(t)}</div><div class="muted small">${kl(t.klasse)} · ${X(`${(d.qByTopic[t.id]||[]).length} Aufgaben`,`${(d.qByTopic[t.id]||[]).length} tasks`)}</div>${bar(w)}</a>`).join('')}`)}
 
 function vocabCard(v){
-  return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span>
+  return `<div class="vc" data-v="${v.id}"><div class="vrow"><span class="vde">${esc(v.de)}</span><span class="ven">${esc(v.en)}</span><span class="vzh" lang="zh">${esc(v.zh)}</span><span class="tag">${kl(v.klasse)}</span>
   <button class="btn ghost sm" data-act="expl" aria-expanded="false">${X('Erklärung','Explanation')}</button></div>
   ${v.lost_points?`<span class="tag warn">${X(`${v.lost_points} Punkte im Test verloren`,`${v.lost_points} points lost in the test`)}</span>`:''}
   <div class="expl" hidden><div>${esc(v.expl_de||'')}</div><div class="en2">${esc(v.expl_en||'')}</div></div></div>`}
@@ -419,7 +421,7 @@ function vocabCard(v){
 function topic(id){
   const d=D[cur],t=d.tById[id];if(!t)return view('<p>Thema nicht gefunden.</p>');
   const L=t.lesson||{},vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
-  const de=`<div><h2>Wissen</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version</b></summary>${blocks(L.knowledge_en)}</details>`:'';
+  const de=`<div><h2>Wissen · ${kl(t.klasse)}</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version · Grade ${t.klasse}</b></summary>${blocks(L.knowledge_en)}</details>`:'';
   view(`<h1>${tTitle(t)}</h1>
   <p><span class="tag">${kl(t.klasse)}</span><span class="tag">${t.error_type==='careless'?X('Flüchtigkeit','careless mistakes'):X('Verständnis','understanding')}</span><span class="tag">${X(`${t.points_lost??0} Punkte verloren`,`${t.points_lost??0} points lost`)}</span></p>
   ${bar(weakness(t))}
@@ -466,7 +468,7 @@ function itemHTML(it,i){
 function leadText(q){if(q.lead_de)return q.lead_de;const i=q.prompt_de.search(/(^|\n)\s*a\)/);return i>0?q.prompt_de.slice(0,i).trim():''}
 function renderQ(){
   const {q,t}=run.cur,its=items(q),lead=q.parts&&q.parts.length?leadText(q):'';
-  view(`<div class="row" style="align-items:center"><span class="tag">${tTitle(t)}</span><span class="muted small">${X('Aufgabe','Task')} ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
+  view(`<div class="row" style="align-items:center"><span class="tag">${tTitle(t)}</span><span class="tag">${kl(q.klasse||t.klasse)}</span>${q.set?`<span class="tag">${esc(setName(q.set))}</span>`:''}<span class="muted small">${X('Aufgabe','Task')} ${run.n+1}${run.timed?' · <span class="timer" id="tm"></span>':''}</span></div>
   <h1>${esc(q.title_de)}</h1>${lead?`<p class="prompt muted">${esc(lead)}</p>`:''}${its.map(itemHTML).join('')}
   <div id="nextbox"></div>
   <p><a class="muted small" href="#/topic/${t.id}">${X('Erklärung zum Thema ansehen','Read the topic explanation')}</a> · <a class="muted small" href="#/summary" id="stop">${X('Beenden','Finish')}</a></p>`);
