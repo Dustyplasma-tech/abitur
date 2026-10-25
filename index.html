@@ -93,12 +93,14 @@ fieldset.fld legend{padding:0 4px}
 .cf{position:fixed;top:-30px;font-size:1.6rem;animation:fall 2.8s ease-in forwards;pointer-events:none;z-index:9}
 @keyframes fall{to{transform:translateY(110vh) rotate(360deg);opacity:.2}}
 @media(prefers-reduced-motion:reduce){.pop,.stars .on,.cf{animation:none}.cf{display:none}}
+.sy{font-size:.8rem;color:var(--mute);white-space:nowrap}.sy[data-s=ok]{color:var(--ok)}.sy[data-s=off]{color:var(--bad)}
 
 </style>
 </head>
 <body>
 <header class="top">
   <a class="brand" href="#/">Abitur&nbsp;Training</a>
+  <span id="sy" class="sy" role="status"></span>
   <a id="xp" class="xpchip" href="#/rewards" aria-label="Belohnungen"></a>
   <select id="subject" aria-label="Fach / Subject"></select>
 </header>
@@ -368,7 +370,7 @@ let S, D={}, index, cur;       // state, loaded subject data, content index, cur
 let USER='';
 const storeKey=()=>DB&&DB.account&&DB.account.legacy?'abitur.v1':'abitur.v1.'+USER;   // the first account keeps the progress that already exists in this browser
 function load(){try{const x=JSON.parse(localStorage.getItem(storeKey()));if(x&&x.v===1)return x}catch(e){}return {v:1,lang:'de',subject:null,p:{},log:{}}}
-function save(){try{localStorage.setItem(storeKey(),JSON.stringify(S))}catch(e){}}
+function save(){if(S)S.ts=Date.now();try{localStorage.setItem(storeKey(),JSON.stringify(S))}catch(e){}schedulePush()}
 function P(){return S.p[cur]??={t:{},q:{}}}
 function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
@@ -396,7 +398,55 @@ async function unlock(){
         try{localStorage.setItem('abitur.sess',JSON.stringify({u,k:b64(new Uint8Array(await crypto.subtle.exportKey('raw',k)))}))}catch(_){}
         $('.top').hidden=false;document.querySelector('.tabs').hidden=false;res()}
       catch(_){$('#gerr').textContent='Name oder Passwort stimmt nicht.';b.disabled=false}}})}
-function lock(){try{localStorage.removeItem('abitur.sess')}catch(e){}location.hash='#/';location.reload()}
+async function lock(){try{await Promise.race([syncNow(),sleep(3000)])}catch(e){}try{localStorage.removeItem('abitur.sess')}catch(e){}location.hash='#/';location.reload()}
+
+/* ---------- sync: progress is encrypted in the browser and stored in a private GitHub repo, so every device of an account shows the same progress ---------- */
+let syncT=null,syncBusy=false,syncDirty=false,syncKey=null;
+const SY=()=>DB&&DB.sync&&DB.sync.token?DB.sync:null;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function setSyncState(st){const e=$('#sy');if(!e)return;e.dataset.s=st;e.textContent={ok:'☁ ✓',busy:'☁ …',off:'☁ ✗',none:''}[st]||'';e.title={ok:'Fortschritt online gespeichert',busy:'Wird gespeichert …',off:'Gerade offline – wird später gespeichert',none:''}[st]||''}
+async function getSyncKey(){return syncKey??=await crypto.subtle.importKey('raw',unb64(SY().key),'AES-GCM',false,['encrypt','decrypt'])}
+async function encryptState(st){const iv=crypto.getRandomValues(new Uint8Array(12)),ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await getSyncKey(),new TextEncoder().encode(JSON.stringify(st))));
+  const all=new Uint8Array(12+ct.length);all.set(iv);all.set(ct,12);return b64(new TextEncoder().encode(JSON.stringify({v:1,d:b64(all)})))}
+async function decryptState(content){const j=JSON.parse(new TextDecoder().decode(unb64(content.replace(/\s/g,'')))),u=unb64(j.d);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(0,12)},await getSyncKey(),u.slice(12))))}
+function gh(method,body){const s=SY();
+  return fetch(`https://api.github.com/repos/${s.repo}/contents/${s.path}`+(method==='GET'?`?ref=${s.branch||'main'}&_=${Date.now()}`:''),{method,cache:'no-store',headers:{Authorization:'Bearer '+s.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})}
+/* merge two progress states (a = this device, b = other device): per entry the one with more answers wins, counters never go down, badges are united, the newer running test wins */
+function pickMax(A,B,key){const o={};for(const id of new Set([...Object.keys(A||{}),...Object.keys(B||{})])){const x=(A||{})[id],y=(B||{})[id];o[id]=!x?y:!y?x:((x[key]||0)>(y[key]||0)||((x[key]||0)===(y[key]||0)&&(x.last||x.due||0)>=(y.last||y.due||0)))?x:y}return o}
+function mergeS(a,b){
+  const m={v:1,lang:a.lang||'de',subject:a.subject||b.subject||null,p:{},log:{},ts:Math.max(a.ts||0,b.ts||0)};
+  for(const s of new Set([...Object.keys(a.p||{}),...Object.keys(b.p||{})])){const A=(a.p||{})[s]||{},B=(b.p||{})[s]||{};m.p[s]={t:pickMax(A.t,B.t,'n'),q:pickMax(A.q,B.q,'n')}}
+  for(const d of new Set([...Object.keys(a.log||{}),...Object.keys(b.log||{})])){const x=(a.log||{})[d],y=(b.log||{})[d];m.log[d]=!x?y:!y?x:((x.n||0)+(x.tests||0)*1e3>=(y.n||0)+(y.tests||0)*1e3)?x:y}
+  const ga=a.g||{},gb=b.g||{};m.g={xp:Math.max(ga.xp||0,gb.xp||0),correct:Math.max(ga.correct||0,gb.correct||0),best:Math.max(ga.best||0,gb.best||0),tests:Math.max(ga.tests||0,gb.tests||0),badges:{...(gb.badges||{}),...(ga.badges||{})}};
+  const nw=(a.ts||0)>=(b.ts||0)?a:b;m.run=nw.run||null;m.last=nw.last||null;return m}
+const core=s=>JSON.stringify({p:s.p,log:s.log,g:s.g,run:s.run,last:s.last,subject:s.subject});
+function saveLocal(){try{localStorage.setItem(storeKey(),JSON.stringify(S))}catch(e){}}
+function schedulePush(ms){if(!SY())return;clearTimeout(syncT);syncT=setTimeout(()=>syncNow(),ms||4000)}
+async function syncNow(force){
+  if(!SY()||!S)return;
+  if(syncBusy){syncDirty=true;return}
+  syncBusy=true;setSyncState('busy');
+  try{
+    for(let i=0;i<3;i++){
+      const r=await gh('GET');let sha=null,remote=null;
+      if(r.status===200){const j=await r.json();sha=j.sha;if(!force)remote=await decryptState(j.content)}else if(r.status!==404)throw new Error('GET '+r.status);
+      if(remote){
+        const keepRun=typeof run!=='undefined'&&run&&S.run===run,m=mergeS(S,remote);
+        if(keepRun)m.run=S.run;
+        if(core(m)!==core(S)){S.p=m.p;S.log=m.log;S.g=m.g;S.ts=m.ts;if(!keepRun){S.run=m.run;S.last=m.last}saveLocal();updateChip()}
+      }
+      if(remote&&core(S)===core(remote)){setSyncState('ok');break}
+      const put=await gh('PUT',{message:'sync',branch:SY().branch||'main',content:await encryptState(S),...(sha?{sha}:{})});
+      if(put.status===200||put.status===201){setSyncState('ok');break}
+      if(put.status===409||put.status===422){force=false;continue}
+      throw new Error('PUT '+put.status)}
+  }catch(e){setSyncState('off')}
+  syncBusy=false;if(syncDirty){syncDirty=false;schedulePush(1500)}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(syncT);syncNow()}else syncNow()});
+window.addEventListener('online',()=>syncNow());
+
 
 async function loadSubject(id){
   if(D[id])return D[id];
@@ -700,8 +750,8 @@ function progress(){
   <p><button class="btn ghost" id="lck">Abmelden (anderer Name)</button></p>`);
   $('#lck').onclick=lock;
   $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download=`abitur-fortschritt-${USER}-${today()}.json`;a.click()};
-  $('#imp').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(x.v!==1)throw 0;S=x;save();alert('Importiert.');route()}catch(_){alert('Datei passt nicht.')}};
-  $('#rst').onclick=()=>{if(confirm('Wirklich alles löschen?')){S={v:1,lang:S.lang,subject:S.subject,p:{},log:{}};save();route()}};
+  $('#imp').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(x.v!==1)throw 0;S=x;save();await syncNow(true);alert('Importiert.');route()}catch(_){alert('Datei passt nicht.')}};
+  $('#rst').onclick=()=>{if(confirm('Wirklich alles löschen?')){S={v:1,lang:S.lang,subject:S.subject,p:{},log:{}};run=null;save();syncNow(true);route()}};
 }
 
 /* ---------- router ---------- */
@@ -714,7 +764,8 @@ async function route(){
   (R[parts[0]||'']||home)();
 }
 async function boot(){
-  await unlock();S=load();updateChip();index={subjects:DB.subjects};
+  await unlock();S=load();updateChip();
+  setSyncState(SY()?'busy':'none');if(SY()){await Promise.race([syncNow(),sleep(7000)]);S.ts=S.ts||Date.now()}index={subjects:DB.subjects};
   const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
   cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
   sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
