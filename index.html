@@ -358,15 +358,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Grad
 /* Abitur Training – static, no build step. Content: content/<fach>/*.json (see content/index.json). */
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const KEY='abitur.v1', DAY=864e5, BOX_DAYS=[0,1,3,7,14], SESSION_MIN=15;
+const DAY=864e5, BOX_DAYS=[0,1,3,7,14], SESSION_MIN=15;
 /* i18n: every UI text is rendered once as two spans; CSS shows the one(s) that match <html data-lang>. Switching the language never re-renders a view, so a running question stays as it is. */
 const X=(de)=>esc(de);   // German only (no language switch)
 function setLang(){}
 let S, D={}, index, cur;       // state, loaded subject data, content index, current subject id
 
 /* ---------- storage ---------- */
-function load(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x&&x.v===1)return x}catch(e){}return {v:1,lang:'de',subject:null,p:{},log:{}}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+let USER='';
+const storeKey=()=>DB&&DB.account&&DB.account.legacy?'abitur.v1':'abitur.v1.'+USER;   // the first account keeps the progress that already exists in this browser
+function load(){try{const x=JSON.parse(localStorage.getItem(storeKey()));if(x&&x.v===1)return x}catch(e){}return {v:1,lang:'de',subject:null,p:{},log:{}}}
+function save(){try{localStorage.setItem(storeKey(),JSON.stringify(S))}catch(e){}}
 function P(){return S.p[cur]??={t:{},q:{}}}
 function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
@@ -380,18 +382,21 @@ async function deriveKey(pw,salt){
   const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},true,['decrypt'])}
 async function openBundle(buf,key){const u=new Uint8Array(buf);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(16,28)},key,u.slice(28));return JSON.parse(new TextDecoder().decode(pt))}
+const uhash=async u=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('abitur:'+u.trim().toLowerCase())))].slice(0,8).map(b=>b.toString(16).padStart(2,'0')).join('');
+async function fetchBundle(u){const r=await fetch('d-'+await uhash(u)+'.enc');if(!r.ok)throw new Error('no account');return r.arrayBuffer()}
 async function unlock(){
-  const r=await fetch('data.enc');if(!r.ok)throw new Error('data.enc '+r.status);const buf=await r.arrayBuffer(),salt=new Uint8Array(buf,0,16);
-  try{const saved=localStorage.getItem('abitur.key');if(saved){DB=await openBundle(buf,await crypto.subtle.importKey('raw',unb64(saved),'AES-GCM',true,['decrypt']));return}}catch(e){}
+  try{localStorage.removeItem('abitur.key')}catch(e){}
+  try{const sess=JSON.parse(localStorage.getItem('abitur.sess'));if(sess&&sess.u){const buf=await fetchBundle(sess.u);DB=await openBundle(buf,await crypto.subtle.importKey('raw',unb64(sess.k),'AES-GCM',true,['decrypt']));USER=sess.u;return}}catch(e){try{localStorage.removeItem('abitur.sess')}catch(_){}}
   await new Promise(res=>{
     $('.top').hidden=true;document.querySelector('.tabs').hidden=true;
-    view(`<h1>Abitur Training</h1><form class="card" id="gate"><p>${X('Bitte Passwort eingeben.','Please enter the password.')}</p><p><input type="password" id="pw" autocomplete="current-password" aria-label="Passwort" autofocus></p><button class="btn big" type="submit">${X('Öffnen','Open')}</button><p id="gerr" class="badtxt" role="alert"></p></form>`);
+    view(`<h1>Abitur Training</h1><form class="card" id="gate"><p>Bitte Namen und Passwort eingeben.</p><p><input type="text" id="un" autocomplete="username" autocapitalize="none" spellcheck="false" aria-label="Name" placeholder="Name" autofocus></p><p><input type="password" id="pw" autocomplete="current-password" aria-label="Passwort" placeholder="Passwort"></p><button class="btn big" type="submit">Öffnen</button><p id="gerr" class="badtxt" role="alert"></p></form>`);
     $('#gate').onsubmit=async e=>{e.preventDefault();const b=$('#gate button');b.disabled=true;$('#gerr').textContent='';
-      try{const k=await deriveKey($('#pw').value,salt);DB=await openBundle(buf,k);
-        try{localStorage.setItem('abitur.key',b64(new Uint8Array(await crypto.subtle.exportKey('raw',k))))}catch(_){}
+      const u=$('#un').value.trim().toLowerCase();
+      try{const buf=await fetchBundle(u),k=await deriveKey($('#pw').value,new Uint8Array(buf,0,16));DB=await openBundle(buf,k);USER=u;
+        try{localStorage.setItem('abitur.sess',JSON.stringify({u,k:b64(new Uint8Array(await crypto.subtle.exportKey('raw',k)))}))}catch(_){}
         $('.top').hidden=false;document.querySelector('.tabs').hidden=false;res()}
-      catch(_){$('#gerr').textContent='Falsches Passwort.';b.disabled=false}}})}
-function lock(){try{localStorage.removeItem('abitur.key')}catch(e){}location.reload()}
+      catch(_){$('#gerr').textContent='Name oder Passwort stimmt nicht.';b.disabled=false}}})}
+function lock(){try{localStorage.removeItem('abitur.sess')}catch(e){}location.hash='#/';location.reload()}
 
 async function loadSubject(id){
   if(D[id])return D[id];
@@ -426,7 +431,7 @@ const setName=x=>SETN[x]||x||'';
 
 function home(){
   const d=D[cur],tl=S.log[today()]||{n:0,ok:0},answered=Object.values(P().t).reduce((a,x)=>a+x.n,0);
-  view(`<h1>${X('Hallo!','Hello!')}</h1>
+  view(`<h1>Hallo, ${esc(DB.account?DB.account.label:'')}!</h1>
   ${xpCard()}
   ${S.run&&S.run.subject===cur?`<a class="btn big" href="#/practice">▶ Test fortsetzen (Aufgabe ${S.run.n+1})</a>`:''}
   <a class="btn big ${S.run&&S.run.subject===cur?'ghost':''}" href="#/practice?timed=1">${X(`Heute ${SESSION_MIN} Minuten üben`,'')}</a>
@@ -452,7 +457,7 @@ function topic(id){
   const L=t.lesson||{},vocab=(t.vocab||[]).map(v=>d.vocab.find(x=>x.id===v)).filter(Boolean);
   const de=`<div><h2>Wissen · ${kl(t.klasse)}</h2>${blocks(L.knowledge_de)}</div>`,en=L.knowledge_en?`<details class="card"><summary><b>English version · Grade ${t.klasse}</b></summary>${blocks(L.knowledge_en)}</details>`:'';
   view(`<h1>${tTitle(t)}</h1>
-  <p><span class="tag">${kl(t.klasse)}</span><span class="tag">${t.error_type==='careless'?X('Flüchtigkeit','careless mistakes'):X('Verständnis','understanding')}</span><span class="tag">${X(`${t.points_lost??0} Punkte verloren`,`${t.points_lost??0} points lost`)}</span></p>
+  <p><span class="tag">${kl(t.klasse)}</span>${t.points_lost==null?'':`<span class="tag">${t.error_type==='careless'?'Flüchtigkeit':'Verständnis'}</span><span class="tag">${t.points_lost} Punkte verloren</span>`}</p>
   ${bar(weakness(t))}
   <p><a class="btn" href="#/practice?topic=${t.id}">${X('Dieses Thema üben','Practise this topic')}</a></p>
   <details class="card" open><summary><b>${X('Beispiel (Aufgabe aus dem Test)','Example (task from the test)')}</b></summary>${blocks(L.worked_example_de)}</details>
@@ -687,14 +692,14 @@ function vocab(q){
 /* ---------- progress / backup ---------- */
 function progress(){
   const d=D[cur],days=Object.keys(S.log).sort().slice(-14);
-  view(`<h1>${X('Stand','Progress')}</h1>
+  view(`<h1>${X('Stand','Progress')}</h1><p class="muted small">Angemeldet als <b>${esc(USER)}</b></p>
   <h2>${X('Themen nach Schwäche','Topics by weakness')}</h2>${weakest(99).map(([t,w])=>{const s=P().t[t.id]||{n:0};return `<a class="card topic" href="#/topic/${t.id}"><div class="t">${esc(t.title_de)}</div><div class="muted small">${X(`${s.n} beantwortet · Schwäche ${Math.round(w*100)} %`,`${s.n} answered · weakness ${Math.round(w*100)} %`)}</div>${bar(w)}</a>`}).join('')}
   <h2>${X('Letzte Tage','Last days')}</h2><div class="card">${days.length?days.map(x=>`<div>${x}: ${S.log[x].ok}/${S.log[x].n} ${X('richtig','correct')}</div>`).join(''):`<span class="muted">${X('Noch nichts geübt.','Nothing practised yet.')}</span>`}</div>
   <h2>${X('Sicherung','Backup')}</h2><div class="card"><p class="small muted">${X('Der Fortschritt liegt nur in diesem Browser. Sichere ihn regelmäßig.','Your progress is stored in this browser only. Back it up often.')}</p>
   <div class="row"><button class="btn" id="exp">${X('Exportieren','Export')}</button><label class="btn ghost">${X('Importieren','Import')}<input id="imp" type="file" accept="application/json" hidden></label><button class="btn ghost" id="rst">${X('Zurücksetzen','Reset')}</button></div></div>
-  <p><button class="btn ghost" id="lck">${X('Sperren (Passwort neu eingeben)','Lock (enter password again)')}</button></p>`);
+  <p><button class="btn ghost" id="lck">Abmelden (anderer Name)</button></p>`);
   $('#lck').onclick=lock;
-  $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download=`abitur-fortschritt-${today()}.json`;a.click()};
+  $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download=`abitur-fortschritt-${USER}-${today()}.json`;a.click()};
   $('#imp').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(x.v!==1)throw 0;S=x;save();alert('Importiert.');route()}catch(_){alert('Datei passt nicht.')}};
   $('#rst').onclick=()=>{if(confirm('Wirklich alles löschen?')){S={v:1,lang:S.lang,subject:S.subject,p:{},log:{}};save();route()}};
 }
@@ -709,7 +714,7 @@ async function route(){
   (R[parts[0]||'']||home)();
 }
 async function boot(){
-  S=load();await unlock();updateChip();index={subjects:DB.subjects};
+  await unlock();S=load();updateChip();index={subjects:DB.subjects};
   const sel=$('#subject');sel.innerHTML=index.subjects.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
   cur=index.subjects.some(s=>s.id===S.subject)?S.subject:index.subjects[0].id;sel.value=cur;
   sel.onchange=()=>{cur=sel.value;S.subject=cur;save();location.hash='#/';route()};
